@@ -43,17 +43,27 @@ El pipeline ha sido implementado y probado en dos mercados distintos para demost
 -   **Visualización**: `Plotly`, `Matplotlib`
 -   **Serialización de Artefactos**: `Joblib`, `JSON`
 
-## 📊 Resultados Destacados
+## 📊 Resultados y Paneles Interactivos
 
+A continuación se muestran los resultados visuales clave generados por los pipelines. Las imágenes son una vista previa estática. **Haz clic en cualquier imagen para ver la versión HTML interactiva completa alojada en GitHub Pages.**
 
-#### Tabla de Recomendaciones (Ejemplo Mercado Mexicano)
-*Una tabla estilizada que clasifica las acciones según su potencial de cambio porcentual a corto, mediano y largo plazo.*
+---
 
-#### Panel de Control de Oportunidades
-*Visualización consolidada para las acciones más prometedoras, mostrando el historial de precios, pronósticos, indicadores técnicos y RSI.*
+### 📈 Mercado Estadounidense (Análisis de Acciones de EE.UU. y BTC)
 
-#### Tabla Comparativa de Estrategias
-*Evaluación del rendimiento promedio del Top 5 de acciones seleccionadas por cada estrategia (LSTM vs. ARIMA) frente al benchmark del mercado.*
+| Tabla de Rendimiento y Estrategias | Panel de Control (Top 5) |
+| :---: | :---: |
+| [![Resultados y Estrategias US](Screenshot_20250725_004740.png)](https://nachovazquez98.github.io/Portafolio-Acciones-LSTMs/multi-var-lstm-hyperpipe.html) | [![Dashboard Interactivo US](Screenshot_20250725_004834.png)](https://nachovazquez98.github.io/Portafolio-Acciones-LSTMs/multi-var-lstm-hyperpipe.html) |
+
+---
+
+### 🇲🇽 Mercado Mexicano (Análisis de la BMV)
+
+| Tabla de Pronósticos de Rendimiento | Panel de Control (Top 3) |
+| :---: | :---: |
+| [![Resultados BMV](Screenshot_20250725_004905.png)](https://nachovazquez98.github.io/Portafolio-Acciones-LSTMs/mx_rnn_stocks.html) | [![Dashboard Interactivo BMV](Screenshot_20250725_005018.png)](https://nachovazquez98.github.io/Portafolio-Acciones-LSTMs/mx_rnn_stocks.html) |
+
+---
 
 ## 💡 Próximos Pasos
 
