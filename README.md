@@ -40,23 +40,15 @@ El pipeline ha sido implementado y probado en dos mercados distintos para demost
 
 ## 📊 Resultados Destacados
 
-A continuación, se muestran ejemplos de los entregables visuales generados por el pipeline.
 
 #### Tabla de Recomendaciones (Ejemplo Mercado Mexicano)
 *Una tabla estilizada que clasifica las acciones según su potencial de cambio porcentual a corto, mediano y largo plazo.*
-![Tabla de Recomendaciones](https://i.imgur.com/your_recommendation_table_image.png)
-
 
 #### Panel de Control de Oportunidades
 *Visualización consolidada para las acciones más prometedoras, mostrando el historial de precios, pronósticos, indicadores técnicos y RSI.*
-![Panel de Control](https://i.imgur.com/your_dashboard_image.png)
-
 
 #### Tabla Comparativa de Estrategias
 *Evaluación del rendimiento promedio del Top 5 de acciones seleccionadas por cada estrategia (LSTM vs. ARIMA) frente al benchmark del mercado.*
-![Tabla Comparativa](https://i.imgur.com/your_strategy_comparison_image.png)
-
-*(Nota: Deberás reemplazar `https://i.imgur.com/your_..._image.png` con las URLs de las capturas de pantalla de tus resultados reales).*
 
 ## 💡 Próximos Pasos
 
