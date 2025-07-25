@@ -28,7 +28,7 @@ El pipeline ha sido implementado y probado en dos mercados distintos para demost
 
 -   `multi-var-lstm-hyperpipe.ipynb`: Notebook principal aplicado al mercado estadounidense.
 -   `mx_rnn_stocks.ipynb`: Notebook adaptado para el mercado mexicano (BMV).
--   `rnn_multi_lstm.ipynb`: Notebook con el pipeline base de LSTM multivariado.
+-   `rnn_multi_lstm.ipynb`: Notebook con el pipeline para predicciónn del IPC mexicano con las acciones de la BMVM.
 -   `production_artifacts/` y `production_artifacts_mx/`: Directorios donde se guardan los artefactos de los mejores modelos.
 
 ## 🛠️ Stack Tecnológico
