@@ -1,0 +1,34 @@
+{
+    "columns": [
+        "META",
+        "AAPL",
+        "MSFT",
+        "GOOGL",
+        "AMZN",
+        "NVDA",
+        "TSLA",
+        "JPM",
+        "JNJ",
+        "V",
+        "WMT",
+        "BTC-USD",
+        "^TNX",
+        "DX-Y.NYB",
+        "META_SMA",
+        "META_EMA",
+        "META_RSI",
+        "META_BB_UPPER",
+        "META_BB_LOWER",
+        "META_MACD",
+        "META_MACD_signal",
+        "META_STOCH_K",
+        "META_ATR",
+        "META_PE",
+        "META_PB"
+    ],
+    "model_params": {
+        "model_type": "SimpleLSTM",
+        "input_size": 25,
+        "hidden_size": 87
+    }
+}
