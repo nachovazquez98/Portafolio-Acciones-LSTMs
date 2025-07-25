@@ -1,10 +1,5 @@
 # Análisis y Pronóstico de Acciones con LSTMs y MLOps
 
-- [Ver el Panel de Control Interactivo 1](https://nachovazquez98.github.io/Portafolio-Acciones-LSTMs/multi-var-lstm-hyperpipe.html)
-- [Ver el Panel de Control Interactivo 2](https://nachovazquez98.github.io/Portafolio-Acciones-LSTMs/mx_rnn_stocks.html)
-- [Ver el Panel de Control Interactivo 3](https://nachovazquez98.github.io/Portafolio-Acciones-LSTMs/rnn_multi_lstm.html)
-
-
 Este repositorio contiene un pipeline avanzado de Machine Learning para el análisis y pronóstico de precios de acciones, utilizando Redes Neuronales Recurrentes (LSTM) multivariadas. El proyecto demuestra un flujo de trabajo de extremo a extremo, desde la ingesta de datos y la ingeniería de características hasta la optimización de hiperparámetros y la preparación de artefactos para un entorno de producción.
 
 El pipeline ha sido implementado y probado en dos mercados distintos para demostrar su flexibilidad:
@@ -31,9 +26,10 @@ El pipeline ha sido implementado y probado en dos mercados distintos para demost
 
 ## 📂 Estructura del Repositorio
 
--   `mx_rnn_stocks.ipynb`: Notebook con la implementación completa del pipeline adaptado para el mercado mexicano (BMV).
--   `multi-var-lstm-hyperpipe.ipynb`: Notebook con el pipeline principal aplicado al mercado estadounidense, que además incluye una comparación con un modelo ARIMA.
--   `production_artifacts/` y `production_artifacts_mx/`: Directorios donde se guardan los artefactos del mejor modelo de cada ejecución para su posterior uso en inferencia.
+-   `multi-var-lstm-hyperpipe.ipynb`: Notebook principal aplicado al mercado estadounidense.
+-   `mx_rnn_stocks.ipynb`: Notebook adaptado para el mercado mexicano (BMV).
+-   `rnn_multi_lstm.ipynb`: Notebook con el pipeline base de LSTM multivariado.
+-   `production_artifacts/` y `production_artifacts_mx/`: Directorios donde se guardan los artefactos de los mejores modelos.
 
 ## 🛠️ Stack Tecnológico
 
@@ -43,25 +39,66 @@ El pipeline ha sido implementado y probado en dos mercados distintos para demost
 -   **Visualización**: `Plotly`, `Matplotlib`
 -   **Serialización de Artefactos**: `Joblib`, `JSON`
 
-## 📊 Resultados y Paneles Interactivos
+## 🚀 Notebooks y Dashboards Interactivos
+
+Puedes ejecutar el código directamente en la nube usando Google Colab o ver los resultados interactivos a través de los enlaces de GitHub Pages.
+
+---
+
+### 1. Pipeline Avanzado (Mercado de EE.UU. y BTC)
+Análisis principal para acciones de alta capitalización. Incluye optimización con Optuna y comparación con ARIMA.
+
+- **Notebook**: 
+[![Abrir en Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/nachovazquez98/Portafolio-Acciones-LSTMs/blob/main/multi-var-lstm-hyperpipe.ipynb)
+
+- **Resultado Interactivo**:
+  - [**Ver el Panel de Control Interactivo 1**](https://nachovazquez98.github.io/Portafolio-Acciones-LSTMs/multi-var-lstm-hyperpipe.html)
+
+### 2. Pipeline Adaptado para el Mercado Mexicano (BMV)
+Análisis enfocado en las principales acciones del S&P/BMV IPC.
+
+- **Notebook**: 
+[![Abrir en Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/nachovazquez98/Portafolio-Acciones-LSTMs/blob/main/mx_rnn_stocks.ipynb)
+
+- **Resultado Interactivo**:
+  - [**Ver el Panel de Control Interactivo 2**](https://nachovazquez98.github.io/Portafolio-Acciones-LSTMs/mx_rnn_stocks.html)
+
+### 3. Pipeline Base de LSTM Multivariado
+Versión fundamental del pipeline que sienta las bases para los análisis más avanzados.
+
+- **Notebook**: 
+[![Abrir en Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/nachovazquez98/Portafolio-Acciones-LSTMs/blob/main/rnn_multi_lstm.ipynb)
+
+- **Resultado Interactivo**:
+  - [**Ver el Panel de Control Interactivo 3**](https://nachovazquez98.github.io/Portafolio-Acciones-LSTMs/rnn_multi_lstm.html)
+
+---
+
+## 📊 Visualizaciones y Resultados Destacados
 
 A continuación se muestran los resultados visuales clave generados por los pipelines. Las imágenes son una vista previa estática. **Haz clic en cualquier imagen para ver la versión HTML interactiva completa alojada en GitHub Pages.**
 
+### 📈 Mercado Estadounidense
+
+**Tabla de Rendimiento y Comparativa de Estrategias**
+
+[![Resultados y Estrategias US](Screenshot_20250725_004740.png)](https://nachovazquez98.github.io/Portafolio-Acciones-LSTMs/multi-var-lstm-hyperpipe.html)
+
+**Panel de Control de Oportunidades (Top 5)**
+
+[![Dashboard Interactivo US](Screenshot_20250725_004834.png)](https://nachovazquez98.github.io/Portafolio-Acciones-LSTMs/multi-var-lstm-hyperpipe.html)
+
 ---
 
-### 📈 Mercado Estadounidense (Análisis de Acciones de EE.UU. y BTC)
+### 🇲🇽 Mercado Mexicano (BMV)
 
-| Tabla de Rendimiento y Estrategias | Panel de Control (Top 5) |
-| :---: | :---: |
-| [![Resultados y Estrategias US](Screenshot_20250725_004740.png)](https://nachovazquez98.github.io/Portafolio-Acciones-LSTMs/multi-var-lstm-hyperpipe.html) | [![Dashboard Interactivo US](Screenshot_20250725_004834.png)](https://nachovazquez98.github.io/Portafolio-Acciones-LSTMs/multi-var-lstm-hyperpipe.html) |
+**Tabla de Pronósticos de Rendimiento para la BMV**
 
----
+[![Resultados BMV](Screenshot_20250725_004905.png)](https://nachovazquez98.github.io/Portafolio-Acciones-LSTMs/mx_rnn_stocks.html)
 
-### 🇲🇽 Mercado Mexicano (Análisis de la BMV)
+**Panel de Control de Oportunidades (Top 3)**
 
-| Tabla de Pronósticos de Rendimiento | Panel de Control (Top 3) |
-| :---: | :---: |
-| [![Resultados BMV](Screenshot_20250725_004905.png)](https://nachovazquez98.github.io/Portafolio-Acciones-LSTMs/mx_rnn_stocks.html) | [![Dashboard Interactivo BMV](Screenshot_20250725_005018.png)](https://nachovazquez98.github.io/Portafolio-Acciones-LSTMs/mx_rnn_stocks.html) |
+[![Dashboard Interactivo BMV](Screenshot_20250725_005018.png)](https://nachovazquez98.github.io/Portafolio-Acciones-LSTMs/mx_rnn_stocks.html)
 
 ---
 
