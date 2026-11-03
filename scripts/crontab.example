@@ -1,0 +1,2 @@
+# Alternativa a systemd: `crontab -e` y pegar (ajusta la ruta):
+30 17 * * 1-5  /ruta/a/Portafolio-Acciones-LSTMs/scripts/run_daily.sh

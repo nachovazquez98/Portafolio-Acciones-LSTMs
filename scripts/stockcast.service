@@ -1,0 +1,16 @@
+# Instalar (usuario, sin root):
+#   mkdir -p ~/.config/systemd/user
+#   cp scripts/stockcast.service scripts/stockcast.timer ~/.config/systemd/user/
+#   sed -i "s|__REPO__|$PWD|" ~/.config/systemd/user/stockcast.service
+#   systemctl --user daemon-reload && systemctl --user enable --now stockcast.timer
+#   systemctl --user list-timers        # verificar
+#   journalctl --user -u stockcast      # ver ejecuciones
+[Unit]
+Description=stockcast: actualizar datos y pronósticos
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=__REPO__/scripts/run_daily.sh
+Nice=10

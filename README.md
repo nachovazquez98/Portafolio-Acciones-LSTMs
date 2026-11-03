@@ -1,96 +1,137 @@
-# Análisis y Pronóstico de Acciones con LSTMs y MLOps
+# stockcast: pronóstico de acciones con bancos centrales, noticias y ML, 100% local
 
-Este repositorio contiene un pipeline avanzado de Machine Learning para el análisis y pronóstico de precios de acciones, utilizando Redes Neuronales Recurrentes (LSTM) multivariadas. El proyecto demuestra un flujo de trabajo de extremo a extremo, desde la ingesta de datos y la ingeniería de características hasta la optimización de hiperparámetros y la preparación de artefactos para un entorno de producción.
+Pronóstico a 1 día, 1 semana, 2 semanas y 1 mes con bandas de confianza.
 
-## 🚀 Acceso Rápido a los Notebooks
+**Mercados núcleo** (siempre activos):
 
-A continuación, encontrarás los enlaces para explorar cada uno de los pipelines principales. Puedes verlos directamente en GitHub o ejecutarlos de forma interactiva en Google Colab.
+- **EE. UU.**: 11 acciones grandes y BTC.
+- **México (BMV)**: 26 emisoras del IPC.
 
----
+**Mercados candidatos** (se activan solo si la validación demuestra que la predicción gana dinero mejor que el azar):
 
-### 📈 **Pipeline 1: Mercado Estadounidense (NYSE/NASDAQ)**
-Análisis enfocado en acciones de alta capitalización de EE. UU. (S&P 500).
+- **Alemania (DAX)**, **Japón (Nikkei)** y **Reino Unido (FTSE 100)**, con 30 acciones líquidas cada uno.
 
-- **Ver el Notebook en GitHub**:
-  - ➡️ [`multi-rnn-lstm-us-stocks.ipynb`](https://github.com/nachovazquez98/Portafolio-Acciones-LSTMs/blob/main/multi-rnn-lstm-us-stocks.ipynb)
-- **Ejecutar en Google Colab**:
-  - [![Abrir en Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/nachovazquez98/Portafolio-Acciones-LSTMs/blob/main/multi-rnn-lstm-us-stocks.ipynb)
+Genera señales de **COMPRA / VENTA EN CORTO** únicamente en los horizontes validados. Incluye un dashboard en Streamlit y órdenes opcionales para un broker con API. Funciona en una laptop: no requiere nube ni API keys de pago.
 
----
+> Proyecto educativo y de investigación. No es asesoría de inversión.
 
-### 🇲🇽 **Pipeline 2: Mercado Mexicano (BMV)**
-Análisis adaptado para las principales acciones del S&P/BMV IPC de México.
+## Inicio rápido
 
-- **Ver el Notebook en GitHub**:
-  - ➡️ [`multi-rnn-lstm-mx-stocks.ipynb`](https://github.com/nachovazquez98/Portafolio-Acciones-LSTMs/blob/main/multi-rnn-lstm-mx-stocks.ipynb)
-- **Ejecutar en Google Colab**:
-  - [![Abrir en Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/nachovazquez98/Portafolio-Acciones-LSTMs/blob/main/multi-rnn-lstm-mx-stocks.ipynb)
+```bash
+make install                      # crea .venv (Python 3.12) e instala dependencias
+.venv/bin/stockcast run --market us   # descarga datos, valida, entrena y pronostica (~1 min)
+make app                          # dashboard en http://localhost:8501
+make schedule                     # (opcional) ejecución diaria automática con systemd
+```
 
----
+Sin `make`: `uv venv --python 3.12 .venv && uv pip install -e ".[dev]"` (o `python -m venv .venv && pip install -e .`).
 
-## ✨ Características Principales
+| Comando | Qué hace |
+|---|---|
+| `stockcast run --market us\|mx\|de\|jp\|uk\|all` | Pipeline completo. `all` = núcleo + candidatos validados. `--no-eval` omite la validación (más rápido). |
+| `stockcast compare --market all` | Compara modelos fuera de muestra y contra predicciones aleatorias, y decide qué mercados y horizontes se activan. Para incluir los LSTM: `--engines ridge lightgbm lstm lstm_legacy`. |
+| `stockcast report` | Escribe `docs/RESULTS.md` con la tabla comparativa. |
+| `stockcast predict --market mx` | Pronostica con los modelos guardados, sin reentrenar. |
+| `stockcast orders --market us --capital 10000` | Genera un CSV con compras y ventas en corto. `--submit` lo envía a Alpaca (*paper* por defecto). |
+| `stockcast news` / `stockcast data` | Actualiza solo noticias o solo datos. |
+| `make install-deep` | Instala PyTorch para el motor LSTM (aprovecha la GPU si existe). |
 
--   **Modelado Avanzado con LSTMs**: Utiliza redes LSTM multivariadas en PyTorch, capaces de capturar complejas dependencias temporales entre el precio de una acción y múltiples variables exógenas.
--   **Ingeniería de Características Robusta**: Incorpora una amplia gama de datos para enriquecer el modelo:
-    -   **Datos de Mercado**: Precios de cierre de un portafolio diversificado para capturar la correlación del mercado.
-    -   **Indicadores Macroeconómicos**: Tipos de cambio (USD/MXN), tasas de interés (^TNX) e índices de mercado (^MXX, ^GSPC) como features.
-    -   **Indicadores Técnicos**: Cálculo automatizado de SMA, EMA, Bandas de Bollinger, RSI, MACD, Oscilador Estocástico y ATR.
-    -   **Datos Fundamentales**: Ratios P/E (Precio/Ganancias) y P/B (Precio/Valor en Libros) para cada acción.
--   **Optimización Automática de Hiperparámetros**: Integra **Optuna** para realizar una búsqueda sistemática de la mejor arquitectura de modelo (Simple vs. Stacked LSTM) y sus hiperparámetros (`learning rate`, `hidden_size`, `num_layers`, `dropout`), minimizando el error en una validación cruzada de series temporales (`TimeSeriesSplit`).
--   **Enfoque Orientado a Producción (MLOps)**: Para la acción con el mejor pronóstico, el pipeline guarda automáticamente los artefactos necesarios para su despliegue:
-    -   El estado del modelo entrenado (`.pth`).
-    -   El objeto escalador de datos (`.joblib`).
-    -   Los metadatos del modelo (columnas, parámetros) en formato `.json`.
--   **Análisis Comparativo y Visualización**:
-    -   Genera tablas de resultados estilizadas que resumen el rendimiento esperado en diferentes horizontes de tiempo (1, 7 y 30 días).
-    -   Crea un panel de control con **Plotly** para visualizar el historial de precios, los indicadores técnicos, el RSI y los pronósticos de las mejores oportunidades.
-    -   Incluye una comparación de rendimiento entre la estrategia LSTM, un modelo ARIMA de benchmark y el índice de mercado (S&P 500 / IPC).
+## Dashboard
 
-## 📂 Estructura del Repositorio
+| Pestaña | Contenido |
+|---|---|
+| **Pronósticos** | Ranking con señal, P(sube), mediana a cada horizonte y rango p10–p90. |
+| **Acción** | Velas, SMA 50/200, abanico de pronóstico, RSI, noticias con sentimiento y ratios de *moat*. |
+| **Bancos centrales** | Tasas de ~40 bancos centrales (BIS), ciclo global de recortes/alzas, tono hawkish/dovish de la Fed e indicadores de estrés (FRED). |
+| **Noticias** | Sentimiento por acción (Yahoo Finance + Google News). |
+| **Validación** | Métricas fuera de muestra, backtest long y long-short, comparación de modelos con p-valores e importancia de variables. |
 
--   `multi-rnn-lstm-us-stocks.ipynb`: Notebook principal aplicado al mercado estadounidense.
--   `multi-rnn-lstm-mx-stocks.ipynb`: Notebook adaptado para el mercado mexicano (BMV).
--   `production_artifacts/` y `production_artifacts_mx/`: Directorios donde se guardan los artefactos de los mejores modelos.
+## Fuentes de datos (todas gratuitas, sin API key)
 
-## 🛠️ Stack Tecnológico
+| Dato | Fuente |
+|---|---|
+| Precios OHLCV, índices, VIX, divisas, materias primas | Yahoo Finance (`yfinance`) |
+| Tasas de política de ~40 bancos centrales | BIS, dataset WS_CBPOL |
+| Comunicados del FOMC (tono hawkish/dovish) | RSS de la Reserva Federal |
+| Incertidumbre de política (EPU), spread high-yield, curva 10a-2a, tasa real | FRED (CSV público) |
+| Noticias | Yahoo Finance + Google News RSS (inglés y español) |
+| Componentes de índices (universo global) | Wikipedia |
+| Estados financieros (moat) | Yahoo Finance |
 
--   **Análisis y Modelado**: `Python`, `PyTorch`, `Optuna`, `Scikit-learn`, `Statsmodels`
--   **Manipulación de Datos**: `Pandas`, `NumPy`
--   **Adquisición de Datos**: `yfinance`
--   **Visualización**: `Plotly`, `Matplotlib`
--   **Serialización de Artefactos**: `Joblib`, `JSON`
+## Cómo funciona
 
-## 📊 Visualizaciones y Resultados Destacados
+```
+data/ (caché parquet)                     artifacts/<mercado>/
+ precios ─┐                               ├ forecasts.parquet      ← dashboard
+ BIS ─────┼─► features.py ─► modelo ─────►├ metrics.json / comparison.json
+ FRED ────┤   (panel fecha×acción,  global ├ backtest.parquet
+ noticias ┘    ~85–130 variables)   por    ├ model_h{1,5,10,21}.joblib
+                                   horizonte└ forecast_history.parquet (para medir precisión real)
+```
 
-A continuación se muestran los resultados visuales clave generados por los pipelines. Las imágenes son una vista previa estática. **Haz clic en cualquier imagen para ver el notebook completo en GitHub.**
+1. **Features**, todas calculadas con información disponible al cierre del día:
+   - Momentum de 1 a 126 días y momentum relativo al universo.
+   - Volatilidad, Bollinger, RSI, MACD, estocástico, ATR, volumen y distancia al máximo de 52 semanas.
+   - Macro: índices, VIX, tasa a 10 años, dólar, petróleo, oro y Bovespa.
+   - Bancos centrales: cambio de tasa de cada banco, *breadth* global y diferenciales MX–US y EUR–US.
+   - Estrés FRED.
+2. **Objetivo**: el retorno logarítmico de t a t+h, con pronóstico **directo** para cada horizonte.
+3. **Modelo**: LightGBM cuantil (p10, p50, p90), uno global para todas las acciones.
+4. **Validación**: walk-forward con purga, comparación contra la caminata aleatoria y contra un modelo aleatorio (permutación), y bandas calibradas con conformal.
+5. **¿Vale la pena predecir?** (`gate.py`): un horizonte se valida solo si se cumplen tres condiciones fuera de muestra:
+   - ordena acciones mejor que el azar (p < 0.05);
+   - la estrategia long-short logra un Sharpe ≥ 0.3;
+   - esa ganancia también le gana al azar (p < 0.10).
 
-### 📈 Mercado Estadounidense
+   Para cada horizonte se usa el modelo barato (Ridge, LightGBM o ensamble) que mejor salió. Si nada pasa, no hay señal.
+6. **Señal**: en los horizontes validados, el 20% superior del ranking recibe COMPRA y el 20% inferior VENTA EN CORTO.
 
-**Tabla de Rendimiento y Comparativa de Estrategias**
+Los papers que respaldan cada decisión están en [`docs/PAPERS.md`](docs/PAPERS.md). El plan para llevarlo a la nube casi gratis, cuando haga falta, está en [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
-[![Resultados y Estrategias US](Screenshot_20250725_004740.png)](https://github.com/nachovazquez98/Portafolio-Acciones-LSTMs/blob/main/multi-rnn-lstm-us-stocks.ipynb)
+## Resultados (validación fuera de muestra, noviembre 2026)
 
-**Panel de Control de Oportunidades (Top 5)**
+Tabla completa en [`docs/RESULTS.md`](docs/RESULTS.md). Se regenera con `stockcast compare --market all && stockcast report`.
 
-[![Dashboard Interactivo US](Screenshot_20250725_004834.png)](https://github.com/nachovazquez98/Portafolio-Acciones-LSTMs/blob/main/multi-rnn-lstm-us-stocks.ipynb)
+| Mercado | Horizontes validados | Modelo elegido | IC | Sharpe long-short | Decisión |
+|---|---|---|---|---|---|
+| EE. UU. | 1 semana, 2 semanas | ensemble | 0.06–0.08 | 1.26 / 0.51 | activo |
+| México | 1 día, 2 semanas, 1 mes | lightgbm / ensemble | 0.04–0.08 | 0.52–0.79 | activo |
+| Alemania | ninguno (IC negativo) | – | < 0 | < 0 | excluido |
+| Japón | ninguno con evidencia suficiente | – | ≈ 0.01 | ≤ 0.6 (p ≥ 0.05) | excluido |
+| Reino Unido | solo 1 mes con un modelo (p = 0.07) | – | 0.04 | 0.62 | excluido |
 
----
+Contra el método original (LSTM por acción, réplica en `models/legacy_lstm.py`) y con la misma validación:
 
-### 🇲🇽 Mercado Mexicano (BMV)
+| Modelo | EE. UU. 5 d IC (p) | EE. UU. 5 d Sharpe long-short | México 21 d IC | Costo |
+|---|---|---|---|---|
+| LSTM original | 0.007 (0.29, **igual que el azar**) | −0.08 | 0.013 | ~50–80 s, GPU |
+| LSTM mejorado | −0.001 (0.59) | −0.71 | 0.060 | ~50–100 s, GPU |
+| **ensemble (LightGBM + Ridge)** | **0.062 (0.003)** | **1.26** | 0.050 | ~4–8 s, CPU |
 
-**Tabla de Pronósticos de Rendimiento para la BMV**
+Advertencias honestas:
+- **Ningún modelo predice la dirección (¿sube o baja?) mejor que "siempre sube"** en este periodo alcista. Lo que sí funciona es **ordenar** acciones: comprar las de arriba y vender en corto las de abajo.
+- La señal VENTA EN CORTO es *relativa*: pensada en pareja con las compras (neutral al mercado). Sola, en un mercado alcista, puede perder.
+- P(sube), que va de 40% a 66%, **no está mejor calibrada que la frecuencia histórica de subidas** (Brier del modelo ≥ Brier base). No sirve para elegir "las que seguro suben". Lo que sí está validado es el orden relativo.
+- Los resultados son de un periodo y universo concretos (12 y 26 acciones). La precisión real se irá midiendo con `forecast_history.parquet`.
 
-[![Resultados BMV](Screenshot_20250725_004905.png)](https://github.com/nachovazquez98/Portafolio-Acciones-LSTMs/blob/main/multi-rnn-lstm-mx-stocks.ipynb)
+## Estructura
 
-**Panel de Control de Oportunidades (Top 3)**
+```
+config/settings.yaml       mercados, horizontes, bancos centrales, hiperparámetros
+src/stockcast/
+  data/                    market, central_banks, fred, cb_tone, news, fundamentals, universe (listas de índices)
+  features.py              ingeniería de features (panel)
+  models/                  naive, momentum, ridge, lightgbm, ensemble, lstm
+  evaluation.py            walk-forward, métricas, backtest, prueba vs. azar, conformal
+  pipeline.py · compare.py · gate.py · signals.py · cli.py
+app/streamlit_app.py       dashboard
+scripts/                   run_daily.sh + timer de systemd / cron
+notebooks/                 notebooks originales con LSTM (referencia histórica)
+tests/                     pruebas sin red (pytest)
+```
 
-[![Dashboard Interactivo BMV](Screenshot_20250725_005018.png)](https://github.com/nachovazquez98/Portafolio-Acciones-LSTMs/blob/main/multi-rnn-lstm-mx-stocks.ipynb)
+## Notebooks originales
 
----
-
-## 💡 Próximos Pasos
-
--   **Crear un Script de Inferencia**: Desarrollar un script `predict.py` que cargue los artefactos guardados para realizar predicciones sobre nuevos datos sin reentrenar.
--   **Backtesting Riguroso**: Implementar una estrategia de backtesting para simular operaciones de compra/venta y evaluar el rendimiento financiero histórico del modelo.
--   **Incorporar Análisis de Sentimiento**: Añadir sentimiento de noticias financieras como una nueva característica para capturar el "mood" del mercado.
--   **Orquestación y Automatización**: Utilizar herramientas como Airflow o Prefect para programar la ejecución periódica del pipeline.
+La versión anterior, con un LSTM por acción y optimización con Optuna, sigue en `notebooks/`:
+[US](https://github.com/nachovazquez98/Portafolio-Acciones-LSTMs/blob/main/notebooks/multi-rnn-lstm-us-stocks.ipynb) ·
+[MX](https://github.com/nachovazquez98/Portafolio-Acciones-LSTMs/blob/main/notebooks/multi-rnn-lstm-mx-stocks.ipynb).

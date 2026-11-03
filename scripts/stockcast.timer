@@ -1,0 +1,10 @@
+[Unit]
+Description=stockcast diario tras el cierre de mercado (lun-vie 17:30)
+
+[Timer]
+OnCalendar=Mon..Fri 17:30
+# Si la laptop estaba apagada a esa hora, corre al encender.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

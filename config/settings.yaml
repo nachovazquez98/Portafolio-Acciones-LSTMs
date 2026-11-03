@@ -1,0 +1,131 @@
+# Configuración central de stockcast. Todo corre en local; las rutas son relativas a la raíz del repo.
+
+paths:
+  data: data            # caché de precios, tasas y noticias (parquet)
+  artifacts: artifacts  # modelos entrenados, pronósticos y métricas
+
+history_years: 8        # años de historia a descargar
+horizons: [1, 5, 10, 21] # días hábiles hacia adelante (1d, 1 semana, 2 semanas, 1 mes)
+quantiles: [0.1, 0.5, 0.9]
+
+markets:
+  us:
+    name: "EE. UU. (NYSE/NASDAQ)"
+    currency: USD
+    benchmark: "^GSPC"
+    tickers: [AAPL, MSFT, GOOGL, AMZN, NVDA, TSLA, JPM, JNJ, V, WMT, META, BTC-USD]
+    macro: ["^GSPC", "^VIX", "^TNX", "DX-Y.NYB", "CL=F", "GC=F"]
+    news_lang: {hl: en-US, gl: US, ceid: "US:en"}
+  mx:
+    name: "México (BMV)"
+    currency: MXN
+    benchmark: "^MXX"
+    tickers: [WALMEX.MX, AMXB.MX, GFNORTEO.MX, FEMSAUBD.MX, GMEXICOB.MX, CEMEXCPO.MX,
+              GFINBURO.MX, BIMBOA.MX, GRUMAB.MX, GAPB.MX, ASURB.MX, ORBIA.MX,
+              PINFRA.MX, AC.MX, KOFUBL.MX, PE&OLES.MX, KIMBERA.MX, BOLSAA.MX,
+              GENTERA.MX, MEGACPO.MX, LIVEPOLC-1.MX, BBAJIOO.MX, GCARSOA1.MX,
+              RA.MX, CUERVO.MX, VESTA.MX]
+    # ^BVSP: el IPC depende de los principales índices latinoamericanos
+    # (Santillán Salgado, Gurrola Ríos & Jiménez Preciado, 2018)
+    macro: ["^MXX", "^GSPC", "^VIX", "MXN=X", "^TNX", "DX-Y.NYB", "CL=F", "^BVSP", "EWW"]
+    news_lang: {hl: es-419, gl: MX, ceid: "MX:es-419"}
+
+  # --- Mercados candidatos: sólo se activan si la validación demuestra que la predicción sirve ---
+  # 30 acciones más líquidas con historia desde 2019. Variables propias: índice local, divisa y la
+  # tasa de su banco central (BIS: XM = BCE, JP = Banco de Japón, GB = Banco de Inglaterra).
+  de:
+    name: "Alemania (DAX)"
+    currency: EUR
+    benchmark: "^GDAXI"
+    tickers: [ADS.DE, ALV.DE, BAS.DE, BAYN.DE, BMW.DE, CBK.DE, CON.DE, DB1.DE, DBK.DE, DHL.DE,
+              DTE.DE, EOAN.DE, FME.DE, FRE.DE, G24.DE, HEI.DE, HNR1.DE, IFX.DE, MBG.DE, MRK.DE,
+              MTX.DE, MUV2.DE, RHM.DE, RWE.DE, SAP.DE, SHL.DE, SIE.DE, SY1.DE, VNA.DE, VOW3.DE]
+    macro: ["^GDAXI", "^STOXX50E", "EURUSD=X", "^VIX", "^TNX", "CL=F", "^GSPC"]
+    news_lang: {hl: en-US, gl: US, ceid: "US:en"}
+  jp:
+    name: "Japón (Nikkei)"
+    currency: JPY
+    benchmark: "^N225"
+    tickers: [3436.T, 4004.T, 4062.T, 4063.T, 5706.T, 5801.T, 5802.T, 5803.T, 6098.T, 6146.T,
+              6501.T, 6723.T, 6752.T, 6758.T, 6857.T, 6861.T, 6920.T, 6976.T, 6981.T, 7011.T,
+              7203.T, 7974.T, 8035.T, 8058.T, 8306.T, 8316.T, 8411.T, 8766.T, 9983.T, 9984.T]
+    macro: ["^N225", "JPY=X", "^VIX", "^TNX", "^GSPC", "^HSI"]
+    news_lang: {hl: en-US, gl: US, ceid: "US:en"}
+  uk:
+    name: "Reino Unido (FTSE 100)"
+    currency: GBP
+    benchmark: "^FTSE"
+    tickers: [AAL.L, AV.L, AZN.L, BA.L, BARC.L, BATS.L, BP.L, DGE.L, EXPN.L, GLEN.L,
+              GSK.L, HSBA.L, III.L, IMB.L, LGEN.L, LLOY.L, LSEG.L, NG.L, NWG.L, PRU.L,
+              REL.L, RIO.L, RKT.L, RR.L, SHEL.L, SSE.L, STAN.L, TSCO.L, ULVR.L, VOD.L]
+    macro: ["^FTSE", "GBPUSD=X", "^VIX", "^TNX", "CL=F", "^GSPC"]
+    news_lang: {hl: en-GB, gl: GB, ceid: "GB:en"}
+
+central_banks:
+  # Fuente: BIS "Central bank policy rates" (WS_CBPOL), gratis y sin API key.
+  # "all" usa todos los bancos centrales que publica el BIS (~40).
+  # El modelo usa todos; el dashboard muestra todos.
+  areas: all
+  # Ventana (días) para medir el ciclo: cuántos bancos recortaron vs. subieron tasas.
+  breadth_window_days: 90
+
+fred:
+  # Series gratuitas de FRED (sin API key) usadas como indicadores de estrés/incertidumbre.
+  USEPUINDXD: "Índice de incertidumbre de política económica (EE. UU.)"
+  T10Y2Y: "Pendiente curva Tesoro 10a-2a"
+  BAMLH0A0HYM2: "Spread high yield (estrés crediticio)"
+  DFII10: "Tasa real 10 años (TIPS)"
+
+model:
+  engine: lightgbm      # naive | momentum | ridge | lightgbm | ensemble | lstm (requiere torch)
+  cv_splits: 4          # walk-forward splits para evaluación
+  lightgbm:              # regularizado: en finanzas la señal es débil y el ruido alto
+    n_estimators: 300
+    learning_rate: 0.02
+    num_leaves: 15
+    min_child_samples: 300
+    subsample: 0.7
+    subsample_freq: 1
+    colsample_bytree: 0.5
+    reg_lambda: 5.0
+    max_bin: 63
+  ridge:
+    alpha: 300
+  lstm:
+    window: 60
+    hidden_size: 64
+    epochs: 30
+    lr: 0.001
+    batch_size: 256
+
+backtest:
+  top_k: 3              # acciones a comprar en cada rebalanceo
+  horizon: 5            # días hábiles de tenencia
+  cost_bps: 10          # costo de transacción por lado (puntos base)
+  borrow_bps_annual: 50 # costo anual de préstamo de acciones para ventas en corto
+
+compare:
+  # `stockcast compare`: modelos a comparar y horizontes (todo fuera de muestra).
+  # Los LSTM se pueden agregar con --engines ... lstm lstm_legacy (lstm_legacy = método del notebook
+  # original). No van por defecto: cuestan ~10x más cómputo y en la validación no superaron a los baratos.
+  engines: [naive, momentum, ridge, lightgbm, ensemble]
+  horizons: [1, 5, 10, 21]
+  permutations: 300
+
+gate:
+  # ¿Vale la pena predecir? (ver src/stockcast/gate.py)
+  core_markets: [us, mx]     # siempre se ejecutan; los demás sólo si algún horizonte se valida
+  engines: [ridge, lightgbm, ensemble]   # modelos baratos elegibles
+  max_p_ic: 0.05
+  # IC mínimo: con 12 pruebas por mercado (4 horizontes x 3 modelos) un p < 0.05 puede salir por
+  # suerte; exigir además un IC con relevancia práctica reduce falsos positivos.
+  min_ic: 0.02
+  min_sharpe_ls: 0.3
+  max_p_sharpe: 0.10
+  # Mercados candidatos (opcionales): evidencia más estricta, para no agregar complejidad/cómputo
+  # por una ventaja que podría ser suerte.
+  candidate_max_p_sharpe: 0.05
+
+news:
+  max_items_per_ticker: 15
+  sentiment: vader      # vader (ligero) | finbert (requiere extra [finbert])
