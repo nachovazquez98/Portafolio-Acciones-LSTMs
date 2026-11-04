@@ -5,9 +5,6 @@ install:            ## crea .venv e instala dependencias
 	uv venv --python 3.12 .venv
 	uv pip install --python $(PY) -e ".[dev]"
 
-install-deep:       ## añade PyTorch para el motor LSTM
-	uv pip install --python $(PY) -e ".[deep]"
-
 run:                ## pipeline completo (ambos mercados)
 	.venv/bin/stockcast run --market all
 
@@ -24,4 +21,4 @@ schedule:           ## instala el timer diario de systemd (usuario)
 	systemctl --user daemon-reload && systemctl --user enable --now stockcast.timer
 	systemctl --user list-timers stockcast.timer
 
-.PHONY: install install-deep run app test schedule
+.PHONY: install run app test schedule

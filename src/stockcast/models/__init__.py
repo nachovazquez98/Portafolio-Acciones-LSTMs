@@ -5,19 +5,13 @@ from stockcast.models.baselines import NaiveModel
 from stockcast.models.gbm import QuantileGBM
 from stockcast.models.linear import EnsembleModel, MomentumModel, RidgeModel
 
-ENGINES = ["naive", "momentum", "ridge", "lightgbm", "ensemble", "lstm", "lstm_legacy"]
+ENGINES = ["naive", "momentum", "ridge", "lightgbm", "ensemble"]
 
 
 def make_model(engine: str, quantiles: list[float], params: dict | None = None):
     params = params or {}
     if engine == "lightgbm":
         return QuantileGBM(quantiles, **params)
-    if engine == "lstm":
-        from stockcast.models.lstm import LSTMModel  # import perezoso: torch es opcional
-        return LSTMModel(quantiles, **params)
-    if engine == "lstm_legacy":
-        from stockcast.models.legacy_lstm import LegacyLSTMModel
-        return LegacyLSTMModel(quantiles, **params)
     if engine == "naive":
         return NaiveModel(quantiles)
     if engine == "momentum":

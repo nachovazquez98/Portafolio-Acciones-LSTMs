@@ -26,6 +26,13 @@ class Market:
     min_dollar_volume: float = 0.0                       # filtro de liquidez
     news: bool = True                                    # descargar noticias en cada corrida
     top_k: int | None = None                             # acciones por lado en el backtest (None = global)
+    sectors: dict[str, str] = field(default_factory=dict)  # ticker -> sector (para agrupar en el dashboard)
+    # Universo punto en el tiempo: en cada fecha sólo entran las `pit_top_n` acciones con mayor volumen
+    # operado (mediana de los `pit_window` días ANTERIORES). Evita elegir la lista a mano o por resultados.
+    pit_top_n: int | None = None
+    pit_window: int = 126
+    pit_min_dollar_volume: float = 0.0   # mínimo de liquidez punto en el tiempo (moneda local)
+    cost_bps: float | None = None        # costo por lado propio del mercado (None = backtest.cost_bps)
 
 
 @lru_cache(maxsize=1)
@@ -43,8 +50,11 @@ def path(name: str) -> Path:
 def market(key: str) -> Market:
     m = dict(load()["markets"][key])
     if m.get("universe"):
-        from stockcast.data.universe import resolve
+        from stockcast.data.universe import resolve, sp500_sectors
         m["tickers"] = resolve(m["universe"], m.get("tickers", []))
+        if not m.get("sectors"):
+            sec = sp500_sectors()
+            m["sectors"] = {t: sec.get(t, "Otro") for t in m["tickers"]}
     return Market(key=key, **m)
 
 

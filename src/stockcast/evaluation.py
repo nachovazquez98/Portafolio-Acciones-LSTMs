@@ -32,7 +32,7 @@ def oos_predictions(panel: pd.DataFrame, features: list[str], horizon: int, engi
     out = []
     for train_end, test_start, test_end in walk_forward_splits(dates, n_splits, horizon):
         train = panel[(dates <= train_end)].dropna(subset=[target])
-        # contexto previo para modelos secuenciales (LSTM)
+        # contexto previo (features ya usan sólo el pasado; esto mantiene la interfaz por fecha)
         ctx = panel[(dates > test_start - pd.Timedelta(days=200)) & (dates <= test_end)]
         model = make_model(engine, quantiles, params).fit(train[features], train[target], horizon)
         pred = model.predict(ctx[features])
@@ -101,14 +101,20 @@ def conformal_scale(pred: pd.DataFrame, quantiles: list[float]) -> float:
 
 
 def backtest(pred: pd.DataFrame, horizon: int, top_k: int, cost_bps: float,
-             benchmark: pd.Series | None = None, borrow_bps_annual: float = 50.0) -> pd.DataFrame:
+             benchmark: pd.Series | None = None, borrow_bps_annual: float = 50.0,
+             y_step: pd.Series | None = None, step: int = 5) -> pd.DataFrame:
     """Cada `horizon` días rebalancea según el retorno mediano pronosticado.
+
+    Si se pasa `y_step` (retorno a `step` días de cada acción) y horizon > step, usa portafolios
+    traslapados (Jegadeesh & Titman 1993): ver `backtest_overlapping`.
 
     - estrategia: compra (long) las top_k acciones.
     - long_short: compra top_k y vende en corto las bottom_k (neutral al mercado),
       descontando costos de ambos lados y el costo de préstamo de los títulos.
     - equiponderado / benchmark: referencias pasivas.
     """
+    if y_step is not None and horizon > step:
+        return backtest_overlapping(pred, horizon, top_k, cost_bps, y_step, step, borrow_bps_annual)
     med = "q0.5"
     # sólo días con suficientes acciones (excluye fines de semana donde sólo cotiza cripto)
     counts = pred.groupby(level="date").size()
@@ -138,6 +144,50 @@ def backtest(pred: pd.DataFrame, horizon: int, top_k: int, cost_bps: float,
     for col in STRATS:
         if col in bt:
             bt[f"{col}_equity"] = (1 + bt[col]).cumprod()
+    bt.attrs["periods_per_year"] = 252 / horizon
+    return bt
+
+
+def backtest_overlapping(pred: pd.DataFrame, horizon: int, top_k: int, cost_bps: float,
+                         y_step: pd.Series, step: int = 5, borrow_bps_annual: float = 50.0) -> pd.DataFrame:
+    """Portafolios traslapados (Jegadeesh & Titman 1993).
+
+    Cada `step` días se forma un portafolio (top_k largo, bottom_k corto) que se mantiene
+    n = horizon // step periodos. El rendimiento de cada periodo es el promedio de los n portafolios vivos,
+    medido con el retorno a `step` días. Sólo 1/n del capital rota por periodo, así que el costo por
+    periodo es 1/n del de una rotación completa. Resultado: una serie de `step` días (≈ semanal) en vez de
+    una observación cada `horizon` días → ~n veces más observaciones para estimar el Sharpe.
+    """
+    from collections import deque
+
+    med = "q0.5"
+    counts = pred.groupby(level="date").size()
+    dates = list(counts[counts >= 2 * top_k].index)[::step]
+    n = max(horizon // step, 1)
+    ys = y_step.dropna()
+    ys_dates = set(ys.index.get_level_values("date"))
+    live: deque = deque(maxlen=n)
+    borrow = borrow_bps_annual / 1e4 * step / 252
+    rows = []
+    for d in dates:
+        g = pred.xs(d, level="date")
+        ranked = g.sort_values(med)
+        live.append((list(ranked.index[-top_k:]), list(ranked.index[:top_k])))
+        if d not in ys_dates:
+            continue
+        yd = np.expm1(ys.xs(d, level="date"))
+        r_l = np.nanmean([yd.reindex(L).mean() for L, _ in live])
+        r_s = np.nanmean([yd.reindex(S).mean() for _, S in live])
+        turn = 2 * cost_bps / 1e4 / n
+        rows.append({"date": d, "estrategia": r_l - turn,
+                     "long_short": 0.5 * (r_l - r_s) - turn - 0.5 * borrow,
+                     "equiponderado": yd.reindex(g.index).mean(),
+                     "picks": ", ".join(live[-1][0][::-1]), "shorts": ", ".join(live[-1][1])})
+    bt = pd.DataFrame(rows).set_index("date") if rows else pd.DataFrame()
+    for col in STRATS:
+        if col in bt:
+            bt[f"{col}_equity"] = (1 + bt[col]).cumprod()
+    bt.attrs["periods_per_year"] = 252 / step
     return bt
 
 
@@ -145,7 +195,7 @@ STRATS = ("estrategia", "long_short", "equiponderado", "benchmark")
 
 
 def summarize_backtest(bt: pd.DataFrame, horizon: int) -> dict:
-    periods = 252 / horizon
+    periods = bt.attrs.get("periods_per_year", 252 / horizon)
     out = {}
     for col in STRATS:
         if col not in bt:
@@ -161,61 +211,167 @@ def summarize_backtest(bt: pd.DataFrame, horizon: int) -> dict:
     return out
 
 
+def _zrank(v: np.ndarray) -> np.ndarray:
+    from scipy.stats import rankdata
+    r = rankdata(v)
+    sd = r.std()
+    return (r - r.mean()) / sd if sd > 0 else np.zeros_like(r)
+
+
 def random_test(pred: pd.DataFrame, horizon: int, top_k: int, cost_bps: float,
-                n_perm: int = 300, seed: int = 0) -> dict:
+                n_perm: int = 300, seed: int = 0, y_step: pd.Series | None = None, step: int = 5,
+                borrow_bps_annual: float = 50.0) -> dict:
     """¿El modelo es mejor que el azar?
 
-    Prueba de permutación: dentro de cada fecha se barajan las predicciones entre
-    acciones (un "modelo aleatorio" con la misma distribución de pronósticos) y se
-    recalculan IC y Sharpe long-short. p-valor = fracción de permutaciones que
-    igualan o superan al modelo real. También prueba binomial del acierto de dirección.
+    Prueba de permutación: dentro de cada fecha se barajan las predicciones entre acciones (un "modelo
+    aleatorio" con la misma distribución de pronósticos) y se recalculan IC y Sharpe long-short con la MISMA
+    construcción de portafolio que el backtest (traslapada si se pasa `y_step`). p-valor = fracción de
+    permutaciones que igualan o superan al modelo real. También prueba binomial del acierto de dirección.
+
+    Vectorizado: las `n_perm` permutaciones se evalúan a la vez como una matriz (fila 0 = modelo real), en vez
+    de repetir todo el cálculo en un bucle por permutación (~50x más rápido).
     """
     from scipy.stats import binomtest
-
-    from scipy.stats import rankdata
 
     rng = np.random.default_rng(seed)
     p = pred.dropna(subset=["q0.5"])[["q0.5", "y"]]
     p = p[p.groupby(level="date")["q0.5"].transform("size") >= 2 * top_k]
     y = p["y"].to_numpy()
+    s0 = p["q0.5"].to_numpy()
     groups = list(p.groupby(level="date").indices.values())
-    rebal = groups[::horizon]
-    ranks_y = [rankdata(y[g]) for g in groups]
-    cost = 2 * cost_bps / 1e4
+    overlapping = y_step is not None and horizon > step
+    every = step if overlapping else horizon
+    rebal_ids = set(range(0, len(groups), every))
+    n_live = max(horizon // step, 1) if overlapping else 1
+    # mismos costos que el backtest: rotación + préstamo de títulos de la pata corta
+    cost = 2 * cost_bps / 1e4 / n_live + 0.5 * borrow_bps_annual / 1e4 * every / 252
+    ppy = 252 / step if overlapping else 252 / horizon
+    P = n_perm + 1
 
-    def stats(score: np.ndarray) -> tuple[float, float]:
-        ics = []
-        for g, ry in zip(groups, ranks_y):
-            rs = rankdata(score[g])
-            if rs.std() > 0 and ry.std() > 0:
-                ics.append(np.corrcoef(rs, ry)[0, 1])
-        ls = []
-        for g in rebal:
-            order = g[np.argsort(score[g])]
-            ls.append(0.5 * (np.expm1(y[order[-top_k:]]).mean() - np.expm1(y[order[:top_k]]).mean()) - cost)
-        ls = np.array(ls)
-        sharpe = ls.mean() / ls.std() * np.sqrt(252 / horizon) if ls.std() > 0 else 0.0
-        return float(np.mean(ics)) if ics else np.nan, float(sharpe)
-
-    base = p["q0.5"].to_numpy()
-    real_ic, real_sh = stats(base)
-    perm_ic, perm_sh = [], []
-    for _ in range(n_perm):
-        shuffled = base.copy()
-        for g in groups:
-            shuffled[g] = rng.permutation(base[g])
-        ic, sh = stats(shuffled)
-        perm_ic.append(ic)
-        perm_sh.append(sh)
+    if overlapping:
+        tickers = p.index.get_level_values("ticker").to_numpy()
+        rebal_dates = [p.index[groups[i][0]][0] for i in sorted(rebal_ids)]
+        ymat = np.expm1(y_step.dropna()).unstack("ticker").reindex(index=rebal_dates)
+        col = {t: i for i, t in enumerate(ymat.columns)}
+        ymat_v = np.column_stack([ymat.to_numpy(), np.full(len(ymat), np.nan)])  # col extra = sin dato
+        miss = ymat_v.shape[1] - 1
+        R = len(rebal_dates)
+        acc = {leg: (np.zeros((R, P)), np.zeros((R, P))) for leg in ("L", "S")}
+    ls_cols = []
+    ic_sum, ic_n = np.zeros(P), 0
+    ri = -1
+    for gi, g in enumerate(groups):
+        m = len(g)
+        perm = np.argsort(rng.random((P, m)), axis=1)
+        perm[0] = np.arange(m)                                   # fila 0 = predicciones reales
+        zs, zy = _zrank(s0[g]), _zrank(y[g])
+        if zs.any() and zy.any():
+            ic_sum += (zs[perm] * zy).mean(axis=1)
+            ic_n += 1
+        if gi not in rebal_ids:
+            continue
+        ri += 1
+        order0 = np.argsort(s0[g], kind="stable")
+        is_top = np.isin(perm, order0[-top_k:])                  # posiciones que el modelo "barajado" compra
+        is_bot = np.isin(perm, order0[:top_k])
+        if not overlapping:
+            ey = np.expm1(y[g])
+            ls_cols.append(0.5 * ((is_top * ey).sum(1) - (is_bot * ey).sum(1)) / top_k - cost)
+            continue
+        codes = np.array([col.get(t, miss) for t in tickers[g]])
+        for leg, mask in (("L", is_top), ("S", is_bot)):
+            pos = np.argsort(~mask, axis=1, kind="stable")[:, :top_k]
+            sel = codes[pos]                                    # P x top_k tickers elegidos
+            for j in range(n_live):                             # el portafolio vive n_live periodos
+                t = ri + j
+                if t >= R:
+                    break
+                v = np.nanmean(ymat_v[t][sel], axis=1)
+                ok = np.isfinite(v)
+                acc[leg][0][t, ok] += v[ok]
+                acc[leg][1][t, ok] += 1
+    if overlapping:
+        with np.errstate(invalid="ignore", divide="ignore"):
+            r_l = acc["L"][0] / acc["L"][1]
+            r_s = acc["S"][0] / acc["S"][1]
+        ls = 0.5 * (r_l - r_s) - cost
+        ls = ls[np.isfinite(ls).all(axis=1)]
+    else:
+        ls = np.array(ls_cols)
+    if len(ls) > 1:
+        sd = ls.std(axis=0)
+        sharpe = np.where(sd > 0, ls.mean(axis=0) / np.where(sd > 0, sd, 1) * np.sqrt(ppy), 0.0)
+    else:
+        sharpe = np.zeros(P)
+    ic = ic_sum / ic_n if ic_n else np.full(P, np.nan)
+    real_ic, real_sh = float(ic[0]), float(sharpe[0])
+    perm_ic, perm_sh = ic[1:], sharpe[1:]
     nz = p["y"] != 0
     hits = int((np.sign(p.loc[nz, "q0.5"]) == np.sign(p.loc[nz, "y"])).sum())
     return {
         "ic": real_ic, "ic_random_p95": float(np.nanpercentile(perm_ic, 95)),
-        "p_value_ic": float((np.sum(np.array(perm_ic) >= real_ic) + 1) / (n_perm + 1)),
+        "p_value_ic": float((np.sum(perm_ic >= real_ic) + 1) / (n_perm + 1)),
         "sharpe_ls": real_sh, "sharpe_random_p95": float(np.nanpercentile(perm_sh, 95)),
-        "p_value_sharpe": float((np.sum(np.array(perm_sh) >= real_sh) + 1) / (n_perm + 1)),
+        "p_value_sharpe": float((np.sum(perm_sh >= real_sh) + 1) / (n_perm + 1)),
         "hit_rate": hits / int(nz.sum()),
         # H0: el acierto no supera al de "siempre sube" (no a 50%, que sería engañoso)
         "p_value_hit": float(binomtest(hits, int(nz.sum()), max(0.5, float((p.loc[nz, "y"] > 0).mean())),
                                        alternative="greater").pvalue),
     }
+
+
+# ---------------------------------------------------------------------------
+# Corrección por haber probado muchas configuraciones
+# ---------------------------------------------------------------------------
+
+def _fold_ic(pred: pd.DataFrame) -> pd.Series:
+    """IC promedio de cada fold de validación."""
+    def ic(g):
+        d = g.groupby(level="date").apply(
+            lambda x: x["q0.5"].corr(x["y"], method="spearman") if x["q0.5"].nunique() > 1 else np.nan)
+        return d.mean()
+    return pred.groupby("fold").apply(ic)
+
+
+def nested_selection(oos_by_engine: dict[str, pd.DataFrame]) -> tuple[pd.DataFrame, list[dict], str]:
+    """Selección anidada (nested walk-forward) del modelo.
+
+    En cada fold k se elige el motor con mejor IC promedio en los folds ANTERIORES y se usan sus
+    predicciones del fold k. El primer fold no tiene historia para elegir y se excluye. El resultado mide
+    el desempeño del *procedimiento de selección*, sin el sesgo de elegir "el mejor" mirando todo.
+    Devuelve (predicciones concatenadas, elecciones por fold, motor elegido con todos los folds).
+    """
+    scores = pd.DataFrame({e: _fold_ic(p) for e, p in oos_by_engine.items()}).sort_index()
+    folds = list(scores.index)
+    parts, choices = [], []
+    for k in range(1, len(folds)):
+        best = scores.iloc[:k].mean().idxmax()
+        p = oos_by_engine[best]
+        parts.append(p[p["fold"] == folds[k]])
+        choices.append({"fold": folds[k], "engine": best})
+    final = scores.mean().idxmax()
+    return (pd.concat(parts) if parts else pd.DataFrame()), choices, final
+
+
+def deflated_sharpe(returns: pd.Series, trial_sharpes: np.ndarray) -> float:
+    """Deflated Sharpe Ratio (Bailey & López de Prado, 2014).
+
+    Probabilidad de que el Sharpe verdadero sea > 0 descontando que se eligió entre N pruebas.
+    `returns`: retornos por periodo de la estrategia evaluada. `trial_sharpes`: Sharpe por periodo de
+    todas las configuraciones probadas (incluida ésta). 0.95 = 95% de confianza tras la corrección.
+    """
+    from scipy.stats import kurtosis, norm, skew
+
+    r = pd.Series(returns).dropna()
+    t = len(r)
+    if t < 5 or r.std() == 0:
+        return np.nan
+    sr = r.mean() / r.std()
+    trials = np.asarray([x for x in trial_sharpes if np.isfinite(x)])
+    n = max(len(trials), 1)
+    euler = 0.5772156649
+    sr0 = 0.0 if n == 1 else np.sqrt(trials.var(ddof=1)) * (
+        (1 - euler) * norm.ppf(1 - 1 / n) + euler * norm.ppf(1 - 1 / (n * np.e)))
+    g3, g4 = skew(r), kurtosis(r, fisher=False)
+    denom = np.sqrt(max(1 - g3 * sr + (g4 - 1) / 4 * sr ** 2, 1e-9))
+    return float(norm.cdf((sr - sr0) * np.sqrt(t - 1) / denom))

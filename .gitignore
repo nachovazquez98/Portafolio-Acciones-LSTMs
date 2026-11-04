@@ -2,7 +2,8 @@
 __pycache__/
 *.egg-info/
 .pytest_cache/
-data/
-artifacts/
-logs/
+# datos y artefactos generados (sólo en la raíz; NO confundir con src/stockcast/data, que es código)
+/data/
+/artifacts/
+/logs/
 .streamlit/secrets.toml

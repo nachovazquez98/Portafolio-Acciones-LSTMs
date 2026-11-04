@@ -1,0 +1,8 @@
+.venv
+.git
+data
+artifacts
+logs
+notebooks
+docs/img
+*.html

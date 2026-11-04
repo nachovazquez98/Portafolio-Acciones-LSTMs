@@ -27,6 +27,7 @@ Hoy todo corre en local: los datos en `data/` (parquet), los modelos en `artifac
 - Configuración en un solo YAML (`config/settings.yaml`) y rutas sobreescribibles con `STOCKCAST_ROOT` / `STOCKCAST_CONFIG`.
 - Datos en parquet: se suben tal cual a S3, R2 o B2 si algún día hace falta. Para consultas SQL locales sin servidor, DuckDB lee los parquet directamente.
 - Un solo comando idempotente (`stockcast run`) que cualquier scheduler puede llamar (systemd, cron, GitHub Actions, Prefect).
+- **Archivos listos en [`deploy/`](../deploy/README.md)**: Dockerfile, docker-compose, plantilla de GitHub Actions y requirements de Streamlit Cloud. Están inactivos hasta que se decida migrar.
 
 ## Universo global (probado y desactivado)
 `data/universe.py` arma automáticamente unas 1600 acciones de 20 bolsas (S&P 500, Nikkei 225, KOSPI 200, FTSE 100, DAX, CAC 40, NIFTY 50 y otras) a partir de Wikipedia. Se descargaron y funcionan, pero se desactivó a propósito por tres razones:

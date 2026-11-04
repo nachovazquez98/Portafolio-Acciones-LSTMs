@@ -5,9 +5,11 @@
   stockcast predict --market mx        # inferencia con modelos guardados, sin reentrenar
   stockcast news --market us           # actualiza el histórico de noticias
   stockcast data                       # sólo refresca precios, bancos centrales y FRED
+  stockcast evaluate --market all      # evaluación por etapas (semanal): prueba rápida → completa → registro
   stockcast compare --market us        # compara modelos fuera de muestra y contra el azar
   stockcast orders --market us --capital 10000           # CSV de compras/ventas en corto
   stockcast orders --market us --capital 10000 --submit  # envía a Alpaca (paper)
+  stockcast ablation --market us       # cuánto aporta cada grupo de variables (bancos, macro…)
   stockcast app                        # abre el dashboard de Streamlit
 """
 from __future__ import annotations
@@ -19,6 +21,35 @@ import sys
 
 from stockcast import config
 from stockcast.models import ENGINES
+
+
+HEAVY = {"run", "compare", "ablation", "predict", "data", "evaluate"}
+
+
+class _Lock:
+    """Candado entre procesos: evita que dos corridas pesadas (p. ej. el timer diario y una manual) compitan
+    por los núcleos, lo que hace que LightGBM se vuelva decenas de veces más lento."""
+
+    def __init__(self):
+        self.path = config.path("data") / ".stockcast.lock"
+        self.fh = None
+
+    def __enter__(self):
+        try:
+            import fcntl
+        except ImportError:  # Windows: sin candado
+            return self
+        self.fh = open(self.path, "w")
+        try:
+            fcntl.flock(self.fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            logging.getLogger("stockcast").info("Otra corrida de stockcast está en curso; esperando a que termine…")
+            fcntl.flock(self.fh, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *exc):
+        if self.fh:
+            self.fh.close()
 
 
 def _markets(arg: str) -> list[str]:
@@ -62,6 +93,13 @@ def main(argv: list[str] | None = None) -> int:
     o.add_argument("--no-short", action="store_true", help="sólo compras")
     o.add_argument("--submit", action="store_true", help="envía a Alpaca (paper por defecto)")
 
+    ev = sub.add_parser("evaluate", help="evaluación por etapas; descarta lo que no funciona")
+    ev.add_argument("--market", default="all")
+    ev.add_argument("--force", action="store_true", help="re-evaluar también los descartados recientes")
+
+    ab = sub.add_parser("ablation", help="mide cuánto aporta cada grupo de variables")
+    ab.add_argument("--market", default="all")
+
     sub.add_parser("report", help="escribe docs/RESULTS.md con la comparación de modelos")
     sub.add_parser("data", help="refresca precios, bancos centrales y FRED")
     sub.add_parser("app", help="abre el dashboard")
@@ -70,8 +108,15 @@ def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(level=logging.DEBUG if a.verbose else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     for noisy in ("yfinance", "urllib3", "peewee"):
-        logging.getLogger(noisy).setLevel(logging.WARNING)
+        logging.getLogger(noisy).setLevel(logging.CRITICAL if not a.verbose else logging.WARNING)
 
+    if a.cmd in HEAVY:
+        with _Lock():
+            return _dispatch(a)
+    return _dispatch(a)
+
+
+def _dispatch(a) -> int:
     if a.cmd == "run":
         from stockcast import pipeline
         for mk in _markets(a.market):
@@ -94,17 +139,47 @@ def main(argv: list[str] | None = None) -> int:
         top_k = a.top_k or config.load()["backtest"]["top_k"]
         df = signals.orders_cli(a.market, a.capital, a.horizon, top_k, a.no_short, a.submit)
         print(df.to_string(index=False))
+    elif a.cmd == "evaluate":
+        from stockcast import compare, experiments, pipeline
+        mks = config.markets() if a.market == "all" else [a.market]
+        for mk in mks:
+            e = compare.evaluate(mk, force=a.force)
+            print(f"{mk:9s} {experiments.STATUS_LABEL.get(e['status'], e['status']):15s} [{e['stage']}] {e['reason']}")
+            if e["status"] == "activo":
+                pipeline.run(mk, refresh=False, evaluate=True)   # métricas y calibración de los plazos válidos
+        print()
+        print(experiments.summary_table().to_string(index=False))
+    elif a.cmd == "ablation":
+        from stockcast import ablation
+        for mk in _markets(a.market):
+            df = ablation.run(mk)
+            print(f"\n=== {mk} ===")
+            print(df[["horizon", "engine", "variant", "n_features", "ic", "sharpe_long_short"]].round(3).to_string(index=False))
+            print("\nAporte por grupo (positivo = ayuda):")
+            print(ablation.contribution(df).round(3).to_string())
     elif a.cmd == "report":
-        from stockcast import compare
+        from stockcast import compare, glossary, pipeline
+        from stockcast.features import feature_columns
         print(compare.report())
+        cols = set()
+        for mk in config.markets():
+            try:
+                cols |= set(feature_columns(pipeline.load_inputs(mk, refresh=False, with_news=False)["panel"]))
+            except Exception:
+                pass
+        glossary.write_markdown(cols)
+        print("Escrito docs/RESULTS.md y docs/VARIABLES.md")
     elif a.cmd == "news":
         from stockcast.data import news
-        for mk in _markets(a.market):
+        for mk in [m for m in _markets(a.market) if config.market(m).news]:
             df = news.update_news_history(config.market(mk).tickers, mk)
             print(f"{mk}: {len(df)} noticias en el histórico")
     elif a.cmd == "data":
+        from stockcast import experiments
         from stockcast.data import central_banks, fred, market
-        tickers = sorted({t for mk in config.markets() for t in
+        # sólo mercados vivos o con re-prueba pendiente (no se descargan datos de experimentos descartados)
+        mks = [mk for mk in config.markets() if experiments.due_for_evaluation(mk)]
+        tickers = sorted({t for mk in mks for t in
                           config.market(mk).tickers + config.market(mk).macro + [config.market(mk).benchmark]})
         market.load_prices(tickers)
         central_banks.load_policy_rates()

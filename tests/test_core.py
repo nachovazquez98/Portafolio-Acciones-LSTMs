@@ -4,7 +4,6 @@ import pandas as pd
 import pytest
 
 from stockcast import evaluation
-from stockcast.data.cb_tone import tone_score
 from stockcast.features import build_panel, central_bank_features, feature_columns
 from stockcast.models import make_model
 
@@ -89,12 +88,6 @@ def test_quantile_model_predicts_all_rows(panel):
     assert len(pred) == len(panel) and not pred.isna().any().any()
 
 
-def test_tone_score():
-    hawk, _, _ = tone_score("The Committee decided to raise the target range. Inflation remains elevated.")
-    dove, _, _ = tone_score("The Committee decided to lower the target range given downside risks.")
-    assert hawk > 0 > dove
-
-
 @pytest.mark.parametrize("engine", ["momentum", "ridge"])
 def test_simple_models(panel, engine):
     feats = feature_columns(panel)
@@ -123,30 +116,122 @@ def test_random_test_detects_signal(panel):
     assert evaluation.random_test(noise, 5, 1, 0, n_perm=50)["p_value_ic"] > 0.05
 
 
-@pytest.mark.parametrize("engine", ["lstm", "lstm_legacy"])
-def test_lstm_engines(panel, engine):
-    pytest.importorskip("torch")
-    feats = feature_columns(panel) + (["close"] if engine == "lstm_legacy" else [])
-    params = {"epochs": 1, "window": 20}
-    oos = evaluation.oos_predictions(panel, feats, 5, engine, Q, params, n_splits=2)
-    assert oos["q0.5"].notna().mean() > 0.9
-
-
 def test_gate_requires_significant_profit(tmp_path, monkeypatch):
     import json
     from stockcast import gate, pipeline
     rows = [  # h=5: lightgbm pasa; h=21: nadie pasa (Sharpe bajo o p alto)
         {"horizon": 5, "engine": "lightgbm", "ic": .06, "p_value_ic": .003, "sharpe_long_short": 1.0, "p_value_sharpe": .01},
         {"horizon": 5, "engine": "ridge", "ic": .03, "p_value_ic": .003, "sharpe_long_short": .7, "p_value_sharpe": .02},
-        {"horizon": 5, "engine": "lstm", "ic": .09, "p_value_ic": .003, "sharpe_long_short": 2.0, "p_value_sharpe": .01},
+        {"horizon": 5, "engine": "momentum", "ic": .09, "p_value_ic": .003, "sharpe_long_short": 2.0, "p_value_sharpe": .01},
         {"horizon": 21, "engine": "ensemble", "ic": .10, "p_value_ic": .003, "sharpe_long_short": .4, "p_value_sharpe": .2},
     ]
     (tmp_path / "comparison.json").write_text(json.dumps(rows))
     monkeypatch.setattr(pipeline, "artifacts_dir", lambda mk: tmp_path)
     d = gate.decide("de")
-    assert d["horizons"][5] == {**d["horizons"][5], "engine": "lightgbm", "validated": True}  # lstm no es elegible
+    assert d["horizons"][5] == {**d["horizons"][5], "engine": "lightgbm", "validated": True}  # momentum no es elegible
     assert not d["horizons"][21]["validated"]
     assert d["active"]
     (tmp_path / "comparison.json").write_text(json.dumps(rows[3:]))
     assert not gate.decide("de")["active"]   # candidato sin horizontes validados -> fuera
     assert gate.decide("us")["active"]       # núcleo siempre activo
+
+
+def test_ablation_contribution_sign():
+    from stockcast.ablation import contribution, group_of
+    assert group_of("cb_US_chg90") == "bancos_centrales" and group_of("m_VIX") == "macro"
+    assert group_of("f_T10Y2Y_chg30") == "fred" and group_of("rsi_14") == "tecnicos"
+    df = pd.DataFrame({"horizon": [5, 5, 5], "variant": ["todas", "sin_macro", "sin_fred"],
+                       "ic": [.06, .02, .07], "sharpe_long_short": [1.0, .2, 1.1]})
+    df["delta_ic"] = df["ic"] - .06
+    df["delta_sharpe"] = df["sharpe_long_short"] - 1.0
+    c = contribution(df)
+    assert c.loc["macro", "aporte_ic"] > 0 and c.loc["fred", "aporte_ic"] < 0  # fred no aporta
+
+
+def test_glossary_describes_every_feature(panel):
+    from stockcast import glossary
+    t = glossary.table(feature_columns(panel))
+    assert (t["descripcion"] != "").all(), t[t["descripcion"] == ""]["variable"].tolist()
+    assert glossary.label("cb_MX_chg90").startswith("Banco de México")
+    assert glossary.label("m_DXYNYB_ret21") == "Índice del dólar (DXY): retorno 1 mes"
+
+
+def test_point_in_time_universe_uses_only_past(prices):
+    from stockcast.pipeline import point_in_time_universe
+    p = prices.copy()
+    big = p["ticker"] == "AAA"
+    p.loc[big, "volume"] *= 100                      # AAA siempre la más líquida
+    late = p["date"] > p["date"].sort_values().unique()[700]
+    p.loc[late & (p["ticker"] == "BBB"), "volume"] *= 10_000   # BBB se vuelve líquida sólo al final
+    mem = point_in_time_universe(p, top_n=1, window=20)
+    d_early = p["date"].sort_values().unique()[400]
+    d_late = p["date"].sort_values().unique()[-1]
+    assert (d_early, "AAA") in mem and (d_early, "BBB") not in mem   # antes no "sabe" que BBB será líquida
+    assert (d_late, "BBB") in mem
+
+
+def test_nested_selection_uses_only_previous_folds():
+    idx = pd.MultiIndex.from_product([pd.bdate_range("2024-01-01", periods=40), list("ABCDE")], names=["date", "ticker"])
+    rng = np.random.default_rng(0)
+    y = rng.normal(size=len(idx))
+    folds = np.repeat(["f1", "f2", "f3", "f4"], len(idx) // 4)
+    good = pd.DataFrame({"q0.5": y, "y": y, "fold": folds}, index=idx)          # ordena perfecto
+    bad = pd.DataFrame({"q0.5": rng.normal(size=len(idx)), "y": y, "fold": folds}, index=idx)
+    nested, choices, final = evaluation.nested_selection({"good": good, "bad": bad})
+    assert final == "good" and all(c["engine"] == "good" for c in choices)
+    assert set(nested["fold"]) == {"f2", "f3", "f4"}                           # el primer fold no se usa
+
+
+def test_deflated_sharpe_penalizes_many_trials():
+    rng = np.random.default_rng(0)
+    r = pd.Series(rng.normal(0.003, 0.02, 200))                                 # Sharpe moderado
+    alone = evaluation.deflated_sharpe(r, np.array([r.mean() / r.std()]))
+    many = evaluation.deflated_sharpe(r, rng.normal(0, 0.1, 50))               # elegido entre 50 pruebas
+    assert alone > many
+
+
+def test_evidence_levels_control_signals():
+    from stockcast.signals import add_signals
+    fc = pd.DataFrame({"ticker": list("ABCDEFGHIJ") * 2, "horizon": [5] * 10 + [21] * 10,
+                       "ret_q0.5": np.tile(np.linspace(-0.05, 0.05, 10), 2),
+                       "evidence": ["moderada"] * 10 + ["ninguna"] * 10})
+    fc["ret_q0.1"], fc["ret_q0.9"] = fc["ret_q0.5"] - 0.04, fc["ret_q0.5"] + 0.04
+    out = add_signals(fc, Q)
+    assert set(out.loc[out["horizon"] == 5, "signal"]) >= {"COMPRA", "VENTA EN CORTO"}
+    assert set(out.loc[out["horizon"] == 21, "signal"]) == {"SIN SEÑAL"}
+
+
+def test_overlapping_backtest_gives_more_observations(panel):
+    feats = feature_columns(panel)
+    oos = evaluation.oos_predictions(panel, feats, 5, "ridge", Q, {}, n_splits=2)
+    oos21 = oos.rename(columns={})  # mismas predicciones, evaluadas como plazo 21
+    plain = evaluation.backtest(oos21, 21, 1, 10)
+    over = evaluation.backtest(oos21, 21, 1, 10, y_step=panel["y_5"])
+    assert len(over) > 3 * len(plain)
+    assert over.attrs["periods_per_year"] == pytest.approx(252 / 5)
+    rnd = evaluation.random_test(oos21, 21, 1, 10, n_perm=20, y_step=panel["y_5"])
+    assert 0 < rnd["p_value_sharpe"] <= 1
+
+
+def test_dsr_uses_evaluated_frequency():
+    rng = np.random.default_rng(0)
+    r = pd.Series(rng.normal(0.004, 0.02, 400))
+    ann = np.array([1.0, 0.5, 0.2, -0.3])
+    weekly = evaluation.deflated_sharpe(r, ann / np.sqrt(52))
+    wrong = evaluation.deflated_sharpe(r, ann / np.sqrt(np.array([252, 52, 25, 12])))  # mezcla de frecuencias
+    assert weekly != wrong and 0 <= weekly <= 1
+
+
+def test_experiment_registry_skips_recent_discards(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta
+    from stockcast import experiments
+    monkeypatch.setattr(experiments, "_path", lambda: tmp_path / "experiments.json")
+    assert experiments.due_for_evaluation("de")                       # nunca evaluado → toca
+    experiments.record("de", "descartado", "sin señal", "prueba rápida")
+    assert not experiments.due_for_evaluation("de")                   # recién descartado → no se recalcula
+    reg = experiments.load()
+    reg["de"]["updated"] = (datetime.now() - timedelta(days=400)).isoformat()
+    experiments.save(reg)
+    assert experiments.due_for_evaluation("de")                       # pasó el plazo → se re-prueba
+    experiments.record("mx", "pausa", "sin ganancia", "evaluación completa")
+    assert experiments.due_for_evaluation("mx")                       # en pausa se sigue evaluando

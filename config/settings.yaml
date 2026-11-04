@@ -4,8 +4,14 @@ paths:
   data: data            # caché de precios, tasas y noticias (parquet)
   artifacts: artifacts  # modelos entrenados, pronósticos y métricas
 
-history_years: 8        # años de historia a descargar
-horizons: [1, 5, 10, 21] # días hábiles hacia adelante (1d, 1 semana, 2 semanas, 1 mes)
+history_years: 8        # (obsoleto; se usa history_start)
+# Historia desde 2000: ~26 años en vez de 8 → ~3x más periodos fuera de muestra (potencia estadística;
+# Harvey, Liu & Zhu 2016; Bailey & López de Prado sobre longitud mínima de backtest).
+history_start: "2000-01-01"
+# Sin 1 día: su Sharpe long-short fue negativo en los 6 mercados evaluados (los costos de rotar a diario
+# superan la señal; Novy-Marx & Velikov 2016, Avramov, Cheng & Metzker 2023). 5 d es necesario para los
+# portafolios traslapados.
+horizons: [5, 10, 21]   # días hábiles hacia adelante (1 semana, 2 semanas, 1 mes)
 quantiles: [0.1, 0.5, 0.9]
 
 markets:
@@ -13,9 +19,13 @@ markets:
     name: "EE. UU. (NYSE/NASDAQ)"
     currency: USD
     benchmark: "^GSPC"
+    # Las 12 originales del proyecto (validadas). El universo ampliado es el mercado `sp100`.
     tickers: [AAPL, MSFT, GOOGL, AMZN, NVDA, TSLA, JPM, JNJ, V, WMT, META, BTC-USD]
     macro: ["^GSPC", "^VIX", "^TNX", "DX-Y.NYB", "CL=F", "GC=F"]
     news_lang: {hl: en-US, gl: US, ceid: "US:en"}
+    sectors: {AAPL: Tecnología, MSFT: Tecnología, NVDA: Tecnología, GOOGL: Comunicaciones, META: Comunicaciones,
+              AMZN: Consumo discrecional, TSLA: Consumo discrecional, JPM: Financiero, V: Financiero,
+              JNJ: Salud, WMT: Consumo básico, BTC-USD: Cripto}
   mx:
     name: "México (BMV)"
     currency: MXN
@@ -29,6 +39,51 @@ markets:
     # (Santillán Salgado, Gurrola Ríos & Jiménez Preciado, 2018)
     macro: ["^MXX", "^GSPC", "^VIX", "MXN=X", "^TNX", "DX-Y.NYB", "CL=F", "^BVSP", "EWW"]
     news_lang: {hl: es-419, gl: MX, ceid: "MX:es-419"}
+    cost_bps: 25         # BMV: diferenciales más amplios que en EE. UU. (Lesmond 2005, mercados emergentes)
+    # Sólo acciones operables: mediana de volumen operado ≥ 20 M MXN/día (~US$1 M) en los 126 días previos.
+    pit_min_dollar_volume: 2.0e+7
+    sectors: {WALMEX.MX: Consumo básico, FEMSAUBD.MX: Consumo básico, BIMBOA.MX: Consumo básico,
+              GRUMAB.MX: Consumo básico, AC.MX: Consumo básico, KOFUBL.MX: Consumo básico,
+              KIMBERA.MX: Consumo básico, CUERVO.MX: Consumo básico,
+              GFNORTEO.MX: Financiero, GFINBURO.MX: Financiero, BOLSAA.MX: Financiero, GENTERA.MX: Financiero,
+              BBAJIOO.MX: Financiero, RA.MX: Financiero,
+              GMEXICOB.MX: Materiales, CEMEXCPO.MX: Materiales, ORBIA.MX: Materiales, PE&OLES.MX: Materiales,
+              GAPB.MX: Industrial, ASURB.MX: Industrial, PINFRA.MX: Industrial, GCARSOA1.MX: Industrial,
+              AMXB.MX: Comunicaciones, MEGACPO.MX: Comunicaciones,
+              LIVEPOLC-1.MX: Consumo discrecional, VESTA.MX: Inmobiliario}
+
+  usliq:
+    name: "EE. UU. dinámico (top 50 por liquidez)"
+    currency: USD
+    benchmark: "^GSPC"
+    # Universo PUNTO EN EL TIEMPO (recomendación de la literatura en vez de elegir listas a mano):
+    # grupo amplio = S&P 500 + Nasdaq-100; en cada fecha entran sólo las 50 con mayor volumen operado
+    # (mediana de los 126 días previos). La regla (50, 126) se fijó antes de ver resultados.
+    universe: [sp500, nasdaq100]
+    pit_top_n: 50
+    pit_window: 126
+    tickers: []
+    macro: ["^GSPC", "^VIX", "^TNX", "DX-Y.NYB", "CL=F", "GC=F", "^NDX"]
+    news_lang: {hl: en-US, gl: US, ceid: "US:en"}
+    top_k: 10
+    news: false
+
+  sectores:
+    name: "Sectores de EE. UU. (ETFs SPDR)"
+    currency: USD
+    benchmark: "^GSPC"
+    # Candidato: rotación sectorial con los 11 ETFs SPDR (9 desde 1998). No tiene sesgo de supervivencia
+    # (los sectores no quiebran) y prueba si la señal de las 12 acciones es rotación de factores
+    # (Moskowitz & Grinblatt 1999: buena parte del momentum es de industria).
+    tickers: [XLK, XLF, XLV, XLE, XLI, XLY, XLP, XLU, XLB, XLRE, XLC]
+    macro: ["^GSPC", "^VIX", "^TNX", "DX-Y.NYB", "CL=F", "GC=F"]
+    news_lang: {hl: en-US, gl: US, ceid: "US:en"}
+    top_k: 2
+    cost_bps: 3          # ETFs muy líquidos (diferencial ~1 pb)
+    news: false
+    sectors: {XLK: Tecnología, XLF: Financiero, XLV: Salud, XLE: Energía, XLI: Industrial,
+              XLY: Consumo discrecional, XLP: Consumo básico, XLU: Servicios públicos, XLB: Materiales,
+              XLRE: Inmobiliario, XLC: Comunicaciones}
 
   # --- Mercados candidatos: sólo se activan si la validación demuestra que la predicción sirve ---
   # 30 acciones más líquidas con historia desde 2019. Variables propias: índice local, divisa y la
@@ -73,11 +128,14 @@ fred:
   # Series gratuitas de FRED (sin API key) usadas como indicadores de estrés/incertidumbre.
   USEPUINDXD: "Índice de incertidumbre de política económica (EE. UU.)"
   T10Y2Y: "Pendiente curva Tesoro 10a-2a"
-  BAMLH0A0HYM2: "Spread high yield (estrés crediticio)"
+  # BAA10Y reemplaza al spread high yield (ICE), cuyo histórico público sólo inicia en 2023.
+  BAA10Y: "Spread corporativo Baa − Tesoro 10 años (estrés crediticio)"
   DFII10: "Tasa real 10 años (TIPS)"
+  # Tasa a 2 años: resume la trayectoria esperada de la política monetaria (Gürkaynak, Sack & Swanson 2005).
+  DGS2: "Tasa del Tesoro a 2 años"
 
 model:
-  engine: lightgbm      # naive | momentum | ridge | lightgbm | ensemble | lstm (requiere torch)
+  engine: lightgbm      # naive | momentum | ridge | lightgbm | ensemble
   cv_splits: 4          # walk-forward splits para evaluación
   lightgbm:              # regularizado: en finanzas la señal es débil y el ruido alto
     n_estimators: 300
@@ -91,25 +149,23 @@ model:
     max_bin: 63
   ridge:
     alpha: 300
-  lstm:
-    window: 60
-    hidden_size: 64
-    epochs: 30
-    lr: 0.001
-    batch_size: 256
 
 backtest:
   top_k: 3              # acciones a comprar en cada rebalanceo
   horizon: 5            # días hábiles de tenencia
-  cost_bps: 10          # costo de transacción por lado (puntos base)
+  cost_bps: 10          # costo de transacción por lado (puntos base); cada mercado puede sobrescribirlo
+  # Portafolios traslapados (Jegadeesh & Titman 1993): para plazos > 5 d se forma un portafolio nuevo cada
+  # semana y se mantiene h días; el rendimiento semanal es el promedio de los portafolios vivos. Da ~4x más
+  # observaciones independientes a 1 mes que rebalancear cada 21 días.
+  overlapping: true
   borrow_bps_annual: 50 # costo anual de préstamo de acciones para ventas en corto
 
 compare:
   # `stockcast compare`: modelos a comparar y horizontes (todo fuera de muestra).
-  # Los LSTM se pueden agregar con --engines ... lstm lstm_legacy (lstm_legacy = método del notebook
-  # original). No van por defecto: cuestan ~10x más cómputo y en la validación no superaron a los baratos.
+  # El LSTM (original y mejorado) se evaluó y se retiró: ~10x más cómputo y no superó a estos
+  # modelos (ver docs/RESULTS.md).
   engines: [naive, momentum, ridge, lightgbm, ensemble]
-  horizons: [1, 5, 10, 21]
+  horizons: [5, 10, 21]
   permutations: 300
 
 gate:
@@ -125,7 +181,20 @@ gate:
   # Mercados candidatos (opcionales): evidencia más estricta, para no agregar complejidad/cómputo
   # por una ventaja que podría ser suerte.
   candidate_max_p_sharpe: 0.05
+  # Deflated Sharpe mínimo (probabilidad de que la ganancia sea real tras descontar TODAS las configuraciones
+  # probadas en el mercado). Fijado de antemano, antes de ver resultados.
+  min_dsr: 0.95
+  # Mercados descartados se vuelven a probar cada tantos días (no cada semana).
+  recheck_days: 180
+  # El entrenamiento diario sólo entrena los plazos con evidencia (moderada o fuerte); el resto se omite.
+  train_only_with_evidence: true
+
+features:
+  # Descarta en cada mercado los grupos de variables que `stockcast ablation` midió sin aporte
+  # (quitarlos no empeora ni el IC ni el Sharpe). Evita saturar el modelo con datos irrelevantes.
+  auto_drop: true
 
 news:
   max_items_per_ticker: 15
+  yahoo: false          # Yahoo limita las peticiones de noticias; Google News basta
   sentiment: vader      # vader (ligero) | finbert (requiere extra [finbert])

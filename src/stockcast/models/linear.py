@@ -1,4 +1,4 @@
-"""Modelos simples para comparar contra LightGBM/LSTM.
+"""Modelos simples (y el ensamble) que acompañan a LightGBM.
 
 - MomentumModel: una sola señal clásica (momentum 6-1 meses, Jegadeesh & Titman 1993)
   con un coeficiente ajustado por MCO. Sin features macro.

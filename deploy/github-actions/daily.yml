@@ -1,0 +1,53 @@
+# PLANTILLA — no está activa. Para activarla:
+#   mkdir -p .github/workflows && cp deploy/github-actions/daily.yml .github/workflows/
+# Corre el pipeline cada día hábil en un runner gratuito de GitHub y publica los artefactos
+# (pronósticos, métricas) en la rama `data`, de donde los puede leer Streamlit Community Cloud.
+name: stockcast-daily
+
+on:
+  schedule:
+    - cron: "30 23 * * 1-5"   # 23:30 UTC ≈ 17:30 CDMX, después del cierre
+  workflow_dispatch: {}       # botón "Run workflow" manual
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12", cache: pip}
+
+      - name: Restaurar caché de datos (evita re-descargar 8 años)
+        uses: actions/cache@v4
+        with:
+          path: data
+          key: stockcast-data-${{ github.run_id }}
+          restore-keys: stockcast-data-
+
+      - name: Restaurar artefactos previos (comparison/ablation decide mercados y variables)
+        run: |
+          git fetch origin data || true
+          git checkout origin/data -- artifacts 2>/dev/null || echo "sin artefactos previos"
+
+      - run: pip install .
+
+      - name: Pipeline (validación completa sólo los lunes)
+        run: stockcast run --market all $([ "$(date -u +%u)" = "1" ] || echo --no-eval)
+
+      - name: Publicar artefactos en la rama data
+        run: |
+          git config user.name "stockcast-bot"
+          git config user.email "stockcast-bot@users.noreply.github.com"
+          cp -r artifacts /tmp/artifacts
+          git checkout --orphan data-tmp
+          git rm -rf . -q
+          cp -r /tmp/artifacts artifacts
+          find artifacts -name "*.joblib" -size +50M -delete
+          git add artifacts
+          git commit -m "artefactos $(date -u +%F)" -q
+          git push -f origin data-tmp:data

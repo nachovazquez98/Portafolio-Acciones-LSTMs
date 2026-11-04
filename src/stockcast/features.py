@@ -61,8 +61,9 @@ def macro_features(macro_close: pd.DataFrame) -> pd.DataFrame:
             out[f"m_{name}"] = s
             out[f"m_{name}_chg21"] = s - s.shift(30)
         else:
-            out[f"m_{name}_ret5"] = np.log(s).diff(7)
-            out[f"m_{name}_ret21"] = np.log(s).diff(30)
+            ls = np.log(s.where(s > 0))  # el petróleo cotizó negativo en abril de 2020
+            out[f"m_{name}_ret5"] = ls.diff(7)
+            out[f"m_{name}_ret21"] = ls.diff(30)
     return out.rename_axis("date")
 
 
@@ -94,7 +95,7 @@ def fred_features(fred: pd.DataFrame) -> pd.DataFrame:
     out = pd.DataFrame(index=fred.index)
     for c in fred.columns:
         s = fred[c].rolling(30, min_periods=1).mean() if c == "USEPUINDXD" else fred[c]
-        if c in ("USEPUINDXD", "BAMLH0A0HYM2"):  # niveles de estrés con rango estable
+        if c in ("USEPUINDXD", "BAA10Y"):  # niveles de estrés con rango estable (tasas: sólo cambios)
             out[f"f_{c}"] = s
         out[f"f_{c}_chg30"] = s - s.shift(30)
     return out.rename_axis("date")

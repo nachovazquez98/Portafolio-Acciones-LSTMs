@@ -4,13 +4,19 @@ Por qué: en la literatura (Gu, Kelly & Xiu 2020; benchmarks M5) los árboles de
 gradient boosting igualan o superan a redes recurrentes en datos tabulares
 financieros, entrenan en segundos en CPU y no requieren escalado ni GPU.
 Entrenar un solo modelo con todas las acciones (panel) da muchos más datos que
-un LSTM por acción y reduce sobreajuste.
+un modelo por acción y reduce sobreajuste.
 """
 from __future__ import annotations
 
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
+from joblib import cpu_count
+
+# LightGBM recomienda tantos hilos como núcleos FÍSICOS: con hyper-threading (16 hilos lógicos en un
+# Ryzen de 8 núcleos) y, sobre todo, con dos procesos a la vez, OpenMP se sobresuscribe y un ajuste de
+# 9 s puede tardar 10 min. Se puede fijar otro valor con `model.lightgbm.n_jobs` en la configuración.
+PHYSICAL_CORES = max(cpu_count(only_physical_cores=True), 1)
 
 
 class QuantileGBM:
@@ -18,7 +24,7 @@ class QuantileGBM:
 
     def __init__(self, quantiles: list[float], **params):
         self.quantiles = quantiles
-        self.params = {"verbosity": -1, "n_jobs": -1, **params}
+        self.params = {"verbosity": -1, "n_jobs": PHYSICAL_CORES, "force_col_wise": True, **params}
         self.models: dict[float, lgb.LGBMRegressor] = {}
 
     def fit(self, X: pd.DataFrame, y: pd.Series, horizon: int = 1) -> "QuantileGBM":

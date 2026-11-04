@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "stockcast"
 version = "0.2.0"
-description = "Pronóstico de acciones (EE. UU. y BMV) con LightGBM/LSTM, tasas de bancos centrales y noticias, 100% local."
+description = "Pronóstico de acciones (EE. UU. y BMV) con LightGBM + Ridge, tasas de bancos centrales y noticias, 100% local."
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -27,8 +27,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# LSTM original (más lento, requiere GPU para ser práctico)
-deep = ["torch>=2.2"]
 # Sentimiento con FinBERT en lugar de VADER (descarga ~400 MB la primera vez)
 finbert = ["transformers>=4.40", "torch>=2.2"]
 dev = ["pytest>=8"]

@@ -34,11 +34,33 @@ def artifacts_dir(market_key: str):
     return d
 
 
-def load_inputs(market_key: str, refresh: bool = True, with_news: bool = True) -> dict:
+def point_in_time_universe(stocks: pd.DataFrame, top_n: int | None, window: int,
+                           min_dollar_volume: float = 0.0) -> pd.MultiIndex:
+    """(fecha, ticker) que pertenecen al universo: mediana de volumen operado (precio x volumen) de los
+    `window` días previos >= min_dollar_volume y, si se pide, dentro del top_n. El shift(1) garantiza que la
+    decisión del día t sólo use datos hasta t-1."""
+    dv = (stocks.assign(dv=stocks["close"] * stocks["volume"])
+          .pivot_table(index="date", columns="ticker", values="dv").sort_index())
+    liq = dv.rolling(window, min_periods=window // 2).median().shift(1)
+    member = liq >= min_dollar_volume
+    if top_n:
+        member &= liq.rank(axis=1, ascending=False) <= top_n
+    member = member.stack()
+    return member[member].index.set_names(["date", "ticker"])
+
+
+def load_inputs(market_key: str, refresh: bool = True, with_news: bool = True,
+                drop_irrelevant: bool = True) -> dict:
     cfg = config.load()
     m = config.market(market_key)
     prices = market.load_prices(sorted(set(m.tickers + m.macro + [m.benchmark])), refresh=refresh)
     stocks = prices[prices["ticker"].isin(m.tickers)]
+    pit_members = None
+    if m.pit_top_n or m.pit_min_dollar_volume > 0:
+        pit_members = point_in_time_universe(stocks, m.pit_top_n, m.pit_window, m.pit_min_dollar_volume)
+        log.info("[%s] universo punto en el tiempo (top %s, mínimo %.0f diario): %d candidatas, %d distintas en la "
+                 "historia", market_key, m.pit_top_n or "todas", m.pit_min_dollar_volume, stocks["ticker"].nunique(),
+                 pit_members.get_level_values("ticker").nunique())
     if m.min_dollar_volume > 0:
         keep = universe.liquid(stocks, m.min_dollar_volume)
         log.info("[%s] %d de %d tickers pasan el filtro de liquidez", market_key, len(keep), stocks["ticker"].nunique())
@@ -62,17 +84,31 @@ def load_inputs(market_key: str, refresh: bool = True, with_news: bool = True) -
             hist = news.update_news_history(m.tickers, market_key) if refresh else \
                 pd.read_parquet(config.path("data") / "news.parquet")
             hist = hist[hist["ticker"].isin(m.tickers)]
-            span = (hist["published"].max() - hist["published"].min()).days if not hist.empty else 0
-            if span >= MIN_NEWS_DAYS:
+            # días distintos con noticias DENTRO del último año y medio: Google devuelve notas viejas sueltas
+            # repartidas en años que no equivalen a una serie diaria utilizable
+            recent = hist[hist["published"] >= pd.Timestamp.now(tz="UTC") - pd.Timedelta(days=548)]
+            days = recent["published"].dt.normalize().nunique() if not recent.empty else 0
+            if days >= MIN_NEWS_DAYS:
                 news_daily = news.daily_sentiment(hist)
             else:
-                log.info("Histórico de noticias de %d días (<%d): aún no se usa como feature", span, MIN_NEWS_DAYS)
+                log.info("[%s] noticias en %d días distintos (<%d): aún no entran al modelo",
+                         market_key, days, MIN_NEWS_DAYS)
         except Exception as e:
             log.warning("Noticias no disponibles: %s", e)
 
     panel = build_panel(stocks, macro_close, cb, cfg["horizons"], news_daily, fr,
                         cfg["central_banks"]["breadth_window_days"])
     panel = panel[panel["ret_126"].notna()]
+    if pit_members is not None:
+        panel = panel[panel.index.isin(pit_members)]
+    if drop_irrelevant:
+        from stockcast.ablation import dropped_groups, group_of
+        drop = dropped_groups(market_key)
+        if drop:
+            cols = [c for c in panel.columns if not c.startswith("y_") and c != "close" and group_of(c) in drop]
+            panel = panel.drop(columns=cols)
+            log.info("[%s] sin aporte en la ablación, se descartan: %s (%d variables)",
+                     market_key, ", ".join(drop), len(cols))
     return {"market": m, "panel": panel, "macro_close": macro_close}
 
 
@@ -87,8 +123,6 @@ def _calibrate(pred: pd.DataFrame, quantiles: list[float], k: float) -> pd.DataF
 
 def _model_params(engine: str) -> dict:
     m = config.load()["model"]
-    if engine == "lstm_legacy":
-        return {}
     if engine == "ensemble":
         return {"lightgbm": dict(m.get("lightgbm", {})), "ridge": dict(m.get("ridge", {}))}
     return dict(m.get(engine, {}))
@@ -98,10 +132,27 @@ def run(market_key: str, refresh: bool = True, engine: str | None = None,
         evaluate: bool = True, with_news: bool = True) -> dict:
     t0 = time.time()
     cfg = config.load()
-    from stockcast import gate
+    from stockcast import experiments, gate
     decision = gate.decide(market_key)
     engine = engine or cfg["model"]["engine"]
     quantiles, horizons = cfg["quantiles"], cfg["horizons"]
+    if decision.get("evaluated") and cfg["gate"].get("train_only_with_evidence", False):
+        # sólo se entrenan los plazos con evidencia; el resto no generaría señales de todos modos
+        horizons = [h for h in horizons
+                    if decision["horizons"].get(h, {}).get("evidence", "ninguna") != "ninguna"]
+        if not horizons:
+            out_dir = artifacts_dir(market_key)
+            (out_dir / "forecasts.parquet").unlink(missing_ok=True)   # evita mostrar pronósticos viejos
+            info = {"market": market_key, "status": "pausa", "gate": decision,
+                    "run_at": datetime.now().isoformat(timespec="seconds"),
+                    "metrics": json.loads((out_dir / "metrics.json").read_text()).get("metrics", {})
+                    if (out_dir / "metrics.json").exists() else {}}
+            (out_dir / "metrics.json").write_text(json.dumps(info, indent=2, default=str), encoding="utf-8")
+            if experiments.get(market_key)["status"] in ("activo", "pendiente"):   # conserva el motivo de la evaluación
+                experiments.record(market_key, "pausa", "ningún plazo con evidencia: no se entrena", "entrenamiento")
+            log.info("[%s] en pausa: ningún plazo con evidencia, no se entrena", market_key)
+            return info
+        log.info("[%s] plazos con evidencia a entrenar: %s", market_key, horizons)
     inputs = load_inputs(market_key, refresh=refresh, with_news=with_news)
     m, panel = inputs["market"], inputs["panel"]
     feats = feature_columns(panel)
@@ -132,7 +183,8 @@ def run(market_key: str, refresh: bool = True, engine: str | None = None,
                      all_metrics[h][eng_h]["ic"])
             if h == bt_h:
                 bench = inputs["macro_close"].get(m.benchmark)
-                bt = evaluation.backtest(oos, h, (m.top_k or cfg["backtest"]["top_k"]), cfg["backtest"]["cost_bps"], bench,
+                bt = evaluation.backtest(oos, h, (m.top_k or cfg["backtest"]["top_k"]),
+                                         m.cost_bps if m.cost_bps is not None else cfg["backtest"]["cost_bps"], bench,
                                          cfg["backtest"]["borrow_bps_annual"])
                 all_metrics["backtest"] = evaluation.summarize_backtest(bt, h)
 
@@ -155,6 +207,7 @@ def run(market_key: str, refresh: bool = True, engine: str | None = None,
             close = panel.loc[(d, t), "close"]
             rec = {"ticker": t, "as_of": d, "horizon": h, "close": close, "engine": eng_h,
                    "validated": bool(g_h.get("validated", False)),
+                   "evidence": g_h.get("evidence", "ninguna"),
                    "target_date": d + pd.offsets.BDay(h)}
             rec["conformal_k"] = k
             for q in quantiles:
@@ -171,7 +224,7 @@ def run(market_key: str, refresh: bool = True, engine: str | None = None,
         pd.concat(importances, axis=1).to_parquet(out_dir / "importance.parquet")
     if not bt.empty:
         bt.to_parquet(out_dir / "backtest.parquet")
-    info = {"market": market_key, "engine": engine, "gate": decision, "run_at": datetime.now().isoformat(timespec="seconds"),
+    info = {"market": market_key, "engine": engine, "gate": decision, "status": "activo", "run_at": datetime.now().isoformat(timespec="seconds"),
             "rows": int(len(panel)), "n_features": len(feats), "tickers": sorted(panel.index.unique("ticker")),
             "seconds": round(time.time() - t0, 1),
             "metrics": {str(k): v for k, v in all_metrics.items()} if evaluate else

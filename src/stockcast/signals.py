@@ -43,7 +43,9 @@ def add_signals(fc: pd.DataFrame, quantiles: list[float], quantile_cut: float = 
     pct = fc.groupby("horizon")["ret_q0.5"].rank(pct=True)
     fc["rank_pct"] = pct
     fc["signal"] = np.select([pct > 1 - quantile_cut, pct <= quantile_cut], ["COMPRA", "VENTA EN CORTO"], "NEUTRAL")
-    if "validated" in fc:  # horizonte sin ventaja demostrada fuera de muestra -> no se recomienda operar
+    if "evidence" in fc:  # plazo sin ventaja demostrada fuera de muestra -> no se recomienda operar
+        fc.loc[fc["evidence"] == "ninguna", "signal"] = "SIN SEÑAL"
+    elif "validated" in fc:
         fc.loc[~fc["validated"].astype(bool), "signal"] = "SIN SEÑAL"
     from stockcast.data.universe import exchange_of
     ex = fc["ticker"].map(exchange_of)
@@ -55,9 +57,13 @@ def build_orders(market_key: str, capital: float, horizon: int, top_k: int, allo
     from stockcast import pipeline  # evita import circular
     fc = pd.read_parquet(pipeline.artifacts_dir(market_key) / "forecasts.parquet")
     f = fc[fc["horizon"] == horizon].sort_values("ret_q0.5")
-    if "validated" in f and not f["validated"].any():
-        raise SystemExit(f"El horizonte {horizon} d de '{market_key}' no pasó la validación (gate): "
+    ev = f["evidence"].iloc[0] if "evidence" in f and len(f) else ("fuerte" if f.get("validated", pd.Series([True])).any() else "ninguna")
+    if ev == "ninguna":
+        raise SystemExit(f"El horizonte {horizon} d de '{market_key}' no tiene evidencia (gate): "
                          "no se generan órdenes. Revisa `stockcast compare`.")
+    if ev == "moderada":
+        log.warning("Evidencia MODERADA en %s a %d d: ordena mejor que el azar, pero la ganancia no sobrevive "
+                    "la corrección por pruebas múltiples. Opera con montos pequeños o en paper.", market_key, horizon)
     legs = [("buy", f.tail(top_k))]
     if allow_short:
         legs.append(("sell_short", f.head(top_k)))

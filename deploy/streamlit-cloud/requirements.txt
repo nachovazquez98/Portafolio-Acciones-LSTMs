@@ -1,0 +1,3 @@
+# Para Streamlit Community Cloud (copiar a la raíz como requirements.txt al activar).
+# Sin PyTorch: el dashboard sólo lee artefactos y LightGBM.
+-e .

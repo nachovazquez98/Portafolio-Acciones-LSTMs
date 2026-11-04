@@ -1,0 +1,20 @@
+# Dashboard + actualización diaria en un servidor (VPS u Oracle Always Free).
+#   docker compose -f deploy/docker-compose.yml up -d
+# Los datos persisten en ./data y ./artifacts del host.
+services:
+  app:
+    build: {context: .., dockerfile: deploy/Dockerfile}
+    ports: ["8501:8501"]
+    volumes: ["../data:/app/data", "../artifacts:/app/artifacts"]
+    restart: unless-stopped
+
+  # Corre el pipeline lun-vie 23:30 UTC (~17:30 CDMX). Usa un cron mínimo dentro del contenedor.
+  scheduler:
+    build: {context: .., dockerfile: deploy/Dockerfile}
+    volumes: ["../data:/app/data", "../artifacts:/app/artifacts"]
+    command: >
+      sh -c 'while true; do
+        if [ "$(date -u +%u)" -le 5 ] && [ "$(date -u +%H%M)" = "2330" ]; then
+          stockcast run --market all $([ "$(date -u +%u)" = "1" ] || echo --no-eval);
+        fi; sleep 60; done'
+    restart: unless-stopped
