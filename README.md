@@ -101,24 +101,24 @@ Tabla completa en [`docs/RESULTS.md`](docs/RESULTS.md). Evaluación rigurosa:
 - 26 años de historia;
 - selección anidada del modelo;
 - portafolios traslapados;
-- costos por mercado (BMV 25 pb);
+- costos por mercado (BMV 25 pb), cobrando sólo la rotación neta (si una acción sigue en el portafolio no paga comisión; Novy-Marx y Velikov, 2016);
 - Deflated Sharpe, que corrige por todas las configuraciones probadas.
 
 | Mercado | Mejor plazo | IC | Sharpe long-short (anidado) | Deflated Sharpe | Estado |
 |---|---|---|---|---|---|
-| EE. UU. (12 originales) | 1 mes | 0.053 | 0.41 | 65% | ✅ activo · 🟡 evidencia moderada |
-| Reino Unido (FTSE) | 1 mes | 0.040 | 0.40 (p = 0.013) | 51% | ✅ activo · 🟡 evidencia moderada |
-| México (BMV) | 2 semanas | 0.065 | 0.29 | 24% | ⏸️ en pausa: ordena bien, pero no gana con costos |
-| Sectores (ETFs SPDR) | 1 mes | 0.057 | 0.24 | 27% | 🗑️ descartado |
+| EE. UU. (12 originales) | 1 sem · 2 sem · 1 mes | 0.043 · 0.044 · 0.053 | 0.53 · 0.48 · 0.50 | 83% · 79% · 81% | ✅ activo · 🟡 evidencia moderada en los 3 plazos |
+| México (BMV) | 2 semanas | 0.065 | 0.55 | 72% | ✅ activo · 🟡 moderada (frágil: ningún modelo fijo pasa solo, sólo la selección anidada) |
+| Reino Unido (FTSE) | 1 mes | 0.040 | 0.44 (p = 0.017) | 66% | ✅ activo · 🟡 evidencia moderada |
+| Sectores (ETFs SPDR) | 1 mes | 0.057 | 0.27 | 34% | 🗑️ descartado |
 | EE. UU. dinámico (top 50 líquidas) | 1 mes | 0.035 | 0.07 | 25% | 🗑️ descartado |
-| Japón | 1 mes | 0.013 | 0.20 | 18% | 🗑️ descartado |
+| Japón | 1 mes | 0.013 | 0.24 | 28% | 🗑️ descartado |
 | Alemania | – | < 0 | < 0 | ≈ 0% | 🗑️ descartado (también en la prueba rápida) |
 | Bonos del Tesoro de EE. UU. (curva) | – | < 0 | – | – | 🗑️ descartado en la prueba rápida |
-| CETES 28/91/182/364 días | – | – | – | – | 🕒 pendiente: requiere `BANXICO_TOKEN` |
+| CETES 28/91/182/364 días | 1 mes | 0.25 (momentum) | no aplica (no hay ventas en corto) | – | 🗑️ elegir plazo rinde ≈ +0.4 pp/año sobre una escalera: real pero pequeño, y supone vender antes del vencimiento |
 
 Qué significa:
-- **Ordenar acciones mejor que el azar es común** (IC significativo en casi todos los mercados). **Ganar dinero con eso, después de costos y de corregir por pruebas múltiples, es raro**: solo EE. UU. y Reino Unido a 1 mes, y con evidencia moderada.
-- La señal vive en el **plazo mensual**. El plazo de 1 día se retiró porque perdió en los 6 mercados.
+- **Ordenar acciones mejor que el azar es común** (IC significativo en casi todos los mercados). **Ganar dinero con eso, después de costos y de corregir por pruebas múltiples, es raro**: solo EE. UU., México (2 semanas) y Reino Unido (1 mes), todos con evidencia moderada. Cobrar sólo la rotación neta (antes se cobraba como si se cambiara todo el portafolio cada semana) fue lo que sacó a México de la pausa.
+- La señal vive en plazos de **2 semanas a 1 mes** (en EE. UU. también a 1 semana). El plazo de 1 día se retiró porque perdió en los 6 mercados.
 - Con 26 años, el universo dinámico de EE. UU. es mucho más débil que las 12 originales. Parte de la ventaja de las 12 puede venir de **sesgo de supervivencia**: son las ganadoras de hoy.
 - Con 26 años, las tasas de bancos centrales **dejaron de aportar** en EE. UU. Su peso con 8 años era propio de 2018–2026.
 

@@ -213,6 +213,18 @@ def test_overlapping_backtest_gives_more_observations(panel):
     assert 0 < rnd["p_value_sharpe"] <= 1
 
 
+def test_turnover_only_charges_what_changes(panel):
+    feats = feature_columns(panel)
+    oos = evaluation.oos_predictions(panel, feats, 5, "ridge", Q, {}, n_splits=2)
+    fixed = oos.copy()
+    fixed["q0.5"] = fixed.index.get_level_values("ticker").map({t: i for i, t in enumerate(
+        sorted(oos.index.get_level_values("ticker").unique()))}).astype(float)   # ranking que nunca cambia
+    bt = evaluation.backtest(fixed, 21, 1, 10, y_step=panel["y_5"])
+    assert bt["rotacion"].iloc[1:].max() < 1e-12          # tras la compra inicial no se paga nada
+    churn = evaluation.backtest(oos, 21, 1, 10, y_step=panel["y_5"])
+    assert churn["rotacion"].iloc[5:].max() <= 2 / 4 + 1e-9   # nunca más que rotar 1/n del capital
+
+
 def test_dsr_uses_evaluated_frequency():
     rng = np.random.default_rng(0)
     r = pd.Series(rng.normal(0.004, 0.02, 400))

@@ -71,7 +71,7 @@ def run(market_key: str, horizons: list[int] | None = None) -> pd.DataFrame:
                                              cfg["model"]["cv_splits"])
             m = evaluation.metrics(oos, q)
             bt = evaluation.summarize_backtest(
-                evaluation.backtest(oos, h, top_k, cfg["backtest"]["cost_bps"], None,
+                evaluation.backtest(oos, h, top_k, mkt.cost_bps if mkt.cost_bps is not None else cfg["backtest"]["cost_bps"], None,
                                     cfg["backtest"]["borrow_bps_annual"]), h)
             rows.append({"market": market_key, "horizon": h, "engine": eng, "variant": name,
                          "n_features": len(cols), "ic": m["ic"],

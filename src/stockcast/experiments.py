@@ -19,7 +19,7 @@ from datetime import date, datetime
 
 from stockcast import config
 
-STATUS_LABEL = {"activo": "✅ activo", "pausa": "⏸️ en pausa", "descartado": "🗑️ descartado",
+STATUS_LABEL = {"activo": "✅ activo", "pausa": "⏸️ suspendido", "descartado": "🗑️ descartado",
                 "pendiente": "🕒 pendiente"}
 
 

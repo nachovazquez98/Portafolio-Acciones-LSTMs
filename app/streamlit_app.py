@@ -33,8 +33,8 @@ def pct(x: float, nd: int = 1) -> str:
     return f"{x * 100:+.{nd}f}%"
 
 
-def how_to(text: str, title: str = "¿Cómo leer esta gráfica?"):
-    with st.expander(f"💡 {title}"):
+def how_to(text: str, title: str = "Nota de lectura"):
+    with st.expander(title):
         st.markdown(text)
 
 
@@ -90,8 +90,8 @@ def load_moat(ticker: str):
 
 
 # ---------------- barra lateral ----------------
-st.sidebar.title("📈 stockcast")
-st.sidebar.caption("Ranking de acciones con machine learning, bancos centrales y macro. 100% local.")
+st.sidebar.title("stockcast")
+st.sidebar.caption("Modelo de retornos esperados de corte transversal con información de mercado, macrofinanciera y de política monetaria. Ejecución local.")
 REG = experiments.load()
 avail = [k for k in config.markets()
          if REG.get(k, {}).get("status") in ("activo", "pausa")
@@ -116,45 +116,47 @@ st.sidebar.divider()
 if INFO:
     st.sidebar.markdown(f"**Última actualización**  \n{INFO['run_at'].replace('T', ' ')}")
 if st.sidebar.button("🔄 Actualizar datos y pronósticos", width="stretch",
-                     help="Descarga precios nuevos y reentrena (1–5 min). La validación completa se hace con "
-                          "`stockcast compare` / la corrida de los lunes."):
-    with st.spinner("Actualizando… (1–5 min)"):
+                     help="Descarga precios y reestima los modelos activos (1–5 min). La validación completa se ejecuta "
+                          "semanalmente (`stockcast evaluate`)."):
+    from stockcast.lock import RunLock
+    with st.spinner("Actualizando datos y pronósticos (1–5 min; en espera si hay otra ejecución en curso)…"), RunLock():
         pipeline.run(mk, refresh=True, evaluate=False)
     st.cache_data.clear()
     st.rerun()
 st.sidebar.divider()
-st.sidebar.caption("¿Primera vez? Empieza por la pestaña **📘 Cómo funciona**.")
-st.sidebar.caption("⚠️ Uso educativo. No es recomendación de inversión.")
+st.sidebar.caption("La especificación, la validación y sus limitaciones se describen en la pestaña **Metodología**.")
+st.sidebar.caption("Uso académico y educativo. No constituye recomendación de inversión.")
 
 def experiments_table():
-    st.subheader("🧪 Estado de los experimentos")
+    st.subheader("Registro de experimentos")
     st.dataframe(experiments.summary_table(), hide_index=True, width="stretch")
-    st.caption("Evaluación por etapas cada lunes: prueba rápida (Ridge, segundos) → evaluación completa sólo si "
-               "pasa → el filtro decide la evidencia. Los descartados no se recalculan; se re-prueban cada "
-               f"{CFG['gate'].get('recheck_days', 180)} días. Sólo se entrenan a diario los plazos con evidencia.")
+    st.caption("Evaluación semanal por etapas: prueba preliminar (Ridge, 100 permutaciones) → evaluación completa sólo "
+               "para los mercados que la superan → criterio de activación por horizonte. Los mercados descartados se "
+               f"reevalúan cada {CFG['gate'].get('recheck_days', 180)} días. Sólo se reestiman diariamente los "
+               "horizontes con evidencia.")
 
 
 if INFO.get("status") == "pausa" or A["forecasts"].empty:
     st.title(M.name)
     e = REG.get(mk, {})
     if INFO.get("status") == "pausa":
-        st.warning(f"**Mercado en pausa:** {e.get('reason', 'ningún plazo con evidencia')}. No se entrena ni se "
-                   "emiten señales; se vuelve a evaluar automáticamente cada lunes.")
+        st.warning(f"**Mercado suspendido:** {e.get('reason', 'ningún horizonte con evidencia')}. No se reestima ni se "
+                   "emiten señales; se reevalúa automáticamente cada semana.")
         rows = [{"Plazo": hl(h), "IC": v["ic"], "p IC": v["p_value_ic"], "Sharpe long-short": v["sharpe_long_short"],
                  "p Sharpe": v["p_value_sharpe"], "Deflated Sharpe": v.get("dsr"), "Evidencia": v.get("evidence", "-")}
                 for h, v in sorted(GATE.items())]
         if rows:
-            st.markdown("**Resultado de la última validación** (selección anidada):")
+            st.markdown("**Última validación fuera de muestra** (selección anidada):")
             st.dataframe(pd.DataFrame(rows).style.format({"IC": "{:.3f}", "p IC": "{:.3f}", "Sharpe long-short": "{:.2f}",
                                                           "p Sharpe": "{:.3f}", "Deflated Sharpe": "{:.0%}"}, na_rep="–"),
                          hide_index=True, width="stretch")
-            how_to("- **IC** alto y **p IC** < 0.05: el modelo sí ordena las acciones mejor que el azar.\n"
-                   "- Pero si el **Sharpe long-short** es bajo o negativo, esa ventaja no alcanza a pagar los costos "
-                   "de operar (en la BMV se asumen 25 pb por operación).\n"
-                   "- Por eso el mercado queda en pausa: hay señal, pero no es rentable aprovecharla.",
-                   "¿Por qué está en pausa si ordena bien?")
+            how_to("- Un **IC** significativo (p < 0.05) indica capacidad de ordenamiento superior al azar.\n"
+                   "- Si el **Sharpe long-short** neto de costos es bajo o no significativo, esa capacidad no compensa "
+                   f"los costos de transacción ({M.cost_bps if M.cost_bps is not None else CFG['backtest']['cost_bps']:g} pb por operación).\n"
+                   "- La suspensión refleja que existe contenido predictivo, pero no es explotable de forma rentable.",
+                   "Criterio de suspensión")
     else:
-        st.info("Aún no hay pronósticos para este mercado. Ejecuta `stockcast evaluate --market " + mk + "`.")
+        st.info("No hay pronósticos disponibles para este mercado. Para generarlos: `stockcast evaluate --market " + mk + "`.")
     experiments_table()
     st.stop()
 
@@ -166,12 +168,11 @@ AS_OF = (stock_dates if len(stock_dates) else pd.to_datetime(FC["as_of"])).max()
 st.title(M.name)
 st.markdown(X.INTRO)
 if M.pit_top_n:
-    st.caption(f"Universo dinámico: de {len(M.tickers)} acciones candidatas (S&P 500 + Nasdaq-100), en cada fecha "
-               f"entran sólo las {M.pit_top_n} con mayor volumen operado de los {M.pit_window} días previos. "
-               "Las señales de hoy se refieren a esas acciones.")
+    st.caption(f"Universo punto en el tiempo: de {len(M.tickers)} emisoras candidatas (S&P 500 + Nasdaq-100), en cada "
+               f"fecha se incluyen las {M.pit_top_n} de mayor volumen operado en los {M.pit_window} días previos.")
 
-tabs = st.tabs(["🎯 Señales", "🔍 Acción", "🌎 Entorno económico", "📰 Noticias", "🧪 ¿Qué tan confiable es?",
-                "📘 Cómo funciona"])
+tabs = st.tabs(["Señales", "Análisis por emisora", "Entorno macrofinanciero", "Noticias", "Validación empírica",
+                "Metodología"])
 
 
 # =====================================================================
@@ -181,18 +182,18 @@ with tabs[0]:
     hs = sorted(FC["horizon"].unique())
     valid = [h for h in hs if evidence(h) != "ninguna"]
     c = st.columns(4)
-    c[0].metric("Acciones analizadas", FC["ticker"].nunique())
+    c[0].metric("Emisoras en el universo", FC["ticker"].nunique())
     c[1].metric("Datos al cierre de", str(AS_OF))
     n_strong = sum(evidence(h) == "fuerte" for h in hs)
-    c[2].metric("Plazos con señal", f"{len(valid)} de {len(hs)}",
+    c[2].metric("Horizontes con señal", f"{len(valid)} de {len(hs)}",
                 f"{n_strong} con evidencia fuerte" if n_strong else "evidencia moderada" if valid else None,
                 delta_color="off",
-                help="Plazos en los que el modelo, en datos que no vio, ordenó mejor que el azar y ganó con una "
-                     "estrategia long-short. 'Fuerte' = además sobrevive a la corrección por pruebas múltiples.")
+                help="Horizontes en los que, fuera de muestra, el ordenamiento superó al azar y la cartera long-short fue "
+                     "rentable neta de costos. 'Fuerte' = además supera la corrección por pruebas múltiples.")
     c[3].metric("Sectores", FC["sector"].nunique())
 
     h_sig = st.segmented_control(
-        "Plazo de inversión", hs, default=valid[0] if valid else hs[-1],
+        "Horizonte de inversión", hs, default=valid[0] if valid else hs[-1],
         format_func=lambda h: f"{hl(h)} " + {"fuerte": "✅", "moderada": "🟡"}.get(evidence(h), "(sin señal)"))
     h_sig = h_sig or (valid[0] if valid else hs[-1])
     cur = FC[FC["horizon"] == h_sig].set_index("ticker").sort_values("ret_q0.5", ascending=False)
@@ -200,27 +201,27 @@ with tabs[0]:
 
     if is_valid:
         g = GATE[h_sig]
-        base = (f"En la validación, el modelo (*{g['engine']}*) ordenó las acciones mejor que el azar "
-                f"(IC {g['ic']:.3f}) y la estrategia long-short logró un Sharpe de {g['sharpe_long_short']:.2f} con costos.")
+        base = (f"Fuera de muestra, la especificación (*{g['engine']}*) obtuvo un IC de {g['ic']:.3f} (p = {g['p_value_ic']:.3f}) "
+                f"y la cartera long-short un Sharpe de {g['sharpe_long_short']:.2f} neto de costos.")
         if evidence(h_sig) == "fuerte":
-            st.success(f"**Plazo {hl(h_sig)}: ✅ evidencia fuerte.** {base} Además sobrevive a la corrección por "
-                       "haber probado muchas configuraciones.")
+            st.success(f"**Horizonte {hl(h_sig)}: ✅ evidencia fuerte.** {base} El resultado se mantiene tras la corrección "
+                       "por pruebas múltiples.")
         else:
             dsr = g.get("dsr")
-            st.warning(f"**Plazo {hl(h_sig)}: 🟡 evidencia moderada.** {base} Pero al descontar todas las "
-                       f"configuraciones probadas, la probabilidad de que la ganancia sea real es "
-                       f"{dsr:.0%} (se exige 95% para 'fuerte'). Úsalo con cautela: montos pequeños o en *paper*."
-                       if dsr is not None else f"**Plazo {hl(h_sig)}: 🟡 evidencia moderada.** {base}")
+            st.warning(f"**Horizonte {hl(h_sig)}: 🟡 evidencia moderada.** {base} Corregido por el número de "
+                       f"especificaciones evaluadas, el Deflated Sharpe Ratio es {dsr:.0%} (umbral de 95% para "
+                       "evidencia fuerte). Se recomienda exposición reducida o simulación (*paper trading*)."
+                       if dsr is not None else f"**Horizonte {hl(h_sig)}: 🟡 evidencia moderada.** {base}")
     else:
-        st.warning(f"**Plazo {hl(h_sig)}: sin señal.** En este plazo el modelo no demostró ventaja sobre el azar. "
-                   "Los pronósticos se muestran sólo como referencia; no se recomienda operar con ellos.")
+        st.warning(f"**Horizonte {hl(h_sig)}: sin señal.** No se rechazó la hipótesis nula de ordenamiento aleatorio. "
+                   "Los pronósticos se presentan sólo con fines descriptivos.")
 
     # --- tarjetas: mejores y peores perspectivas ---
     n_show = 5
     left, right = st.columns(2)
     for col, title, df, color in (
-            (left, "🟢 Mejores perspectivas" + (" · COMPRA" if is_valid else ""), cur.head(n_show), GREEN),
-            (right, ("⚪ Menos atractivos" if M.long_only else "🔴 Peores perspectivas")
+            (left, "Quintil superior" + (" · COMPRA" if is_valid else ""), cur.head(n_show), GREEN),
+            (right, ("Menor retorno esperado" if M.long_only else "Quintil inferior")
              + (" · VENTA EN CORTO" if is_valid and not M.long_only else ""), cur.tail(n_show)[::-1], RED)):
         with col.container(border=True):
             st.markdown(f"#### {title}")
@@ -230,25 +231,25 @@ with tabs[0]:
                            unsafe_allow_html=True)
                 b.markdown(f"<span style='color:{color};font-size:1.25em;font-weight:600'>{pct(r['ret_q0.5'])}</span>",
                            unsafe_allow_html=True)
-                cc.markdown(f"<span style='font-size:0.85em'>rango {pct(r['ret_q0.1'])} a {pct(r['ret_q0.9'])}"
+                cc.markdown(f"<span style='font-size:0.85em'>p10–p90: {pct(r['ret_q0.1'])} a {pct(r['ret_q0.9'])}"
                             f"<br>precio {r['close']:,.2f} → {r['price_q0.5']:,.2f}</span>", unsafe_allow_html=True)
-    how_to(X.HOW_TO_READ_SIGNALS, "¿Qué significa cada señal y cada número?")
+    how_to(X.HOW_TO_READ_SIGNALS, "Definición de señales e indicadores")
 
     # --- por sector ---
-    st.subheader(f"Retorno esperado por sector · {hl(h_sig)}")
+    st.subheader(f"Retorno esperado promedio por sector · {hl(h_sig)}")
     by_sec = cur.groupby("sector")["ret_q0.5"].agg(["mean", "count"]).sort_values("mean")
     fig = go.Figure(go.Bar(x=by_sec["mean"], y=by_sec.index, orientation="h",
                            marker_color=[GREEN if v > by_sec["mean"].median() else RED for v in by_sec["mean"]],
-                           text=[f"{n} acc." for n in by_sec["count"]], textposition="outside",
+                           text=[f"{n} emisoras" for n in by_sec["count"]], textposition="outside",
                            hovertemplate="%{y}: %{x:+.2%}<extra></extra>"))
-    fig.update_layout(xaxis_tickformat="+.1%", xaxis_title="Retorno esperado promedio (mediana)")
+    fig.update_layout(xaxis_tickformat="+.1%", xaxis_title="Mediana condicional promedio del retorno")
     st.plotly_chart(compact(fig, max(260, 34 * len(by_sec))), width="stretch")
-    how_to("Promedio del retorno esperado de las acciones de cada sector. Verde = por encima de la mediana de "
-           "sectores. Sirve para ver **qué tipo de empresas** favorece el modelo en el entorno actual (p. ej. "
-           "defensivas como consumo básico y salud vs. cíclicas como tecnología o materiales).")
+    how_to("Promedio sectorial de la mediana condicional del retorno. Verde: por encima de la mediana entre sectores. "
+           "Permite identificar la **rotación sectorial implícita** en el ordenamiento (p. ej., sectores defensivos "
+           "—consumo básico, salud— frente a cíclicos —tecnología, materiales—).")
 
     # --- tabla completa ---
-    st.subheader("Todas las acciones")
+    st.subheader("Universo completo")
     f1, f2 = st.columns(2)
     sectors = sorted(cur["sector"].unique())
     sec_sel = f1.multiselect("Sector", sectors, placeholder="Todos los sectores")
@@ -272,14 +273,14 @@ with tabs[0]:
                  .map(lambda v: sig_color.get(v, ""), subset=["Señal"])
                  .background_gradient(cmap="RdYlGn", subset=[f"Esperado {hl(h_sig)}"], vmin=-0.06, vmax=0.06),
                  width="stretch", height=min(45 + 35 * len(table), 640))
-    st.caption(f"{len(table)} acciones. Para generar órdenes: `stockcast orders --market {mk} --horizon {h_sig}`.")
+    st.caption(f"{len(table)} emisoras. Generación de órdenes: `stockcast orders --market {mk} --horizon {h_sig}`.")
 
     # --- rango ---
-    st.subheader(f"Rango esperado · {hl(h_sig)}")
+    st.subheader(f"Intervalos de predicción · {hl(h_sig)}")
     rng = view.sort_values("ret_q0.5")
     if len(rng) > 40:
         rng = pd.concat([rng.head(20), rng.tail(20)])
-        st.caption("Mostrando las 20 con mejores y las 20 con peores perspectivas (filtra por sector para ver otras).")
+        st.caption("Se muestran las 20 emisoras con mayor y las 20 con menor retorno esperado; el filtro sectorial permite ver el resto.")
     colors = [GREEN if s == "COMPRA" else RED if s == "VENTA EN CORTO" else BLUE for s in rng["signal"]]
     fig = go.Figure(go.Scatter(
         x=rng["ret_q0.5"], y=rng.index, mode="markers", marker=dict(size=10, color=colors),
@@ -287,7 +288,7 @@ with tabs[0]:
                      arrayminus=rng["ret_q0.5"] - rng["ret_q0.1"], color="#c5cfdb", thickness=2),
         customdata=np.column_stack([rng["ret_q0.1"], rng["ret_q0.9"], rng["sector"]]),
         hovertemplate="<b>%{y}</b> (%{customdata[2]})<br>Esperado %{x:+.2%}<br>"
-                      "Rango %{customdata[0]:+.2%} a %{customdata[1]:+.2%}<extra></extra>"))
+                      "p10–p90: %{customdata[0]:+.2%} a %{customdata[1]:+.2%}<extra></extra>"))
     fig.add_vline(x=0, line_dash="dot", line_color=GRAY)
     fig.update_layout(xaxis_tickformat="+.0%", showlegend=False, hovermode="closest")
     st.plotly_chart(compact(fig, max(320, 24 * len(rng))), width="stretch")
@@ -301,7 +302,7 @@ with tabs[1]:
     s1, s2 = st.columns([1, 3])
     sec_pick = s1.selectbox("Sector", ["Todos"] + sorted(FC["sector"].unique()))
     opts = sorted(FC.loc[FC["sector"] == sec_pick, "ticker"].unique()) if sec_pick != "Todos" else sorted(FC["ticker"].unique())
-    tick = s2.selectbox("Acción", opts)
+    tick = s2.selectbox("Emisora", opts)
     px_all = load_prices(tuple(M.tickers))
     g = px_all[px_all["ticker"] == tick].set_index("date").sort_index()
     f_t = FC[FC["ticker"] == tick].sort_values("horizon")
@@ -313,26 +314,26 @@ with tabs[1]:
     for col, (_, r) in zip(cols[1:], f_t.iterrows()):
         badge = {"fuerte": " ✅", "moderada": " 🟡"}.get(evidence(r["horizon"]), " · sin señal")
         col.metric(f"{hl(r['horizon'])}{badge}", f"{r['price_q0.5']:,.2f}", pct(r["ret_q0.5"], 2),
-                   help=f"Rango p10–p90: {r['price_q0.1']:,.2f} a {r['price_q0.9']:,.2f}. Señal: {r['signal']}")
+                   help=f"Intervalo p10–p90: {r['price_q0.1']:,.2f} a {r['price_q0.9']:,.2f}. Señal: {r['signal']}")
 
-    # lectura técnica en lenguaje simple
+    # indicadores técnicos resumidos
     sma50, sma200 = close.rolling(50).mean().iloc[-1], close.rolling(200).mean().iloc[-1]
     rsi = _rsi(close).iloc[-1]
     ret6m = close.iloc[-1] / close.iloc[-127] - 1 if len(close) > 127 else np.nan
     vol_now = np.log(close).diff().tail(21).std() * np.sqrt(252)
     vol_hist = np.log(close).diff().tail(756).std() * np.sqrt(252)
     dd52 = close.iloc[-1] / close.tail(252).max() - 1
-    trend = ("📈 Alcista" if close.iloc[-1] > sma50 > sma200 else "📉 Bajista" if close.iloc[-1] < sma50 < sma200
-             else "↔️ Mixta")
+    trend = ("Alcista" if close.iloc[-1] > sma50 > sma200 else "Bajista" if close.iloc[-1] < sma50 < sma200
+             else "Lateral")
     readings = [
-        ("Tendencia", trend, f"Precio vs. medias de 50 y 200 días ({close.iloc[-1] / sma200 - 1:+.1%} sobre la de 200)."),
-        ("Momentum 6 meses", pct(ret6m), "Ganadoras de 3–12 meses tienden a seguir ganando (efecto momentum)."),
+        ("Tendencia", trend, f"Precio frente a las medias de 50 y 200 días ({close.iloc[-1] / sma200 - 1:+.1%} respecto a la de 200)."),
+        ("Momentum 6 meses", pct(ret6m), "Persistencia de rendimientos a 3–12 meses (Jegadeesh y Titman, 1993)."),
         ("RSI 14", f"{rsi:.0f} · " + ("sobrecompra" if rsi > 70 else "sobreventa" if rsi < 30 else "neutral"),
-         "> 70 subió muy rápido (riesgo de corrección); < 30 cayó muy rápido (posible rebote)."),
+         "> 70: sobrecompra; < 30: sobreventa."),
         ("Volatilidad", f"{vol_now:.0%} anual · " + ("más alta de lo normal" if vol_now > 1.2 * vol_hist
                                                     else "más baja de lo normal" if vol_now < 0.8 * vol_hist else "normal"),
-         f"Último mes vs. su promedio de 3 años ({vol_hist:.0%})."),
-        ("Distancia al máximo anual", pct(dd52), "0% = en máximos del año; muy negativo = lejos de sus máximos."),
+         f"Volatilidad realizada a 21 días frente al promedio de 3 años ({vol_hist:.0%})."),
+        ("Distancia al máximo de 52 semanas", pct(dd52), "0% = máximo de 52 semanas."),
     ]
     rc = st.columns(len(readings))
     for col, (name, val, tip) in zip(rc, readings):
@@ -354,8 +355,8 @@ with tabs[1]:
     fig.add_trace(go.Scatter(x=x0, y=[y0] + list(f_t["price_q0.9"]), line=dict(width=0), showlegend=False,
                              hoverinfo="skip"), row=1, col=1)
     fig.add_trace(go.Scatter(x=x0, y=[y0] + list(f_t["price_q0.1"]), fill="tonexty", line=dict(width=0),
-                             fillcolor="rgba(42,111,219,0.18)", name="Rango p10–p90"), row=1, col=1)
-    fig.add_trace(go.Scatter(x=x0, y=[y0] + list(f_t["price_q0.5"]), name="Pronóstico (escenario central)",
+                             fillcolor="rgba(42,111,219,0.18)", name="Intervalo p10–p90"), row=1, col=1)
+    fig.add_trace(go.Scatter(x=x0, y=[y0] + list(f_t["price_q0.5"]), name="Pronóstico (mediana)",
                              line=dict(color=BLUE, dash="dash", width=2), mode="lines+markers"), row=1, col=1)
     fig.add_trace(go.Scatter(x=gg.index, y=_rsi(close).loc[gg.index], name="RSI 14", line=dict(color="#8e44ad")),
                   row=2, col=1)
@@ -371,17 +372,17 @@ with tabs[1]:
         st.subheader("Noticias recientes")
         nd = load_news(tick, mk)
         if nd.empty:
-            st.caption("Sin noticias disponibles.")
+            st.caption("No hay notas disponibles.")
         else:
             st.caption(f"Tono promedio {nd['sentiment'].mean():+.2f} (−1 negativo · +1 positivo). "
-                       "Contexto para ti: aún no entra al modelo.")
+                       "Información contextual; no forma parte del conjunto de predictores.")
             for _, r in nd.head(8).iterrows():
                 icon = "🟢" if r["sentiment"] > 0.15 else "🔴" if r["sentiment"] < -0.15 else "⚪"
                 when = r["published"].strftime("%d-%b") if pd.notna(r["published"]) else ""
                 st.markdown(f"{icon} [{r['title']}]({r['url']}) <span style='color:{GRAY};font-size:0.8em'>"
                             f"· {r['source']} · {when}</span>", unsafe_allow_html=True)
     with right:
-        st.subheader("Calidad del negocio (moat)")
+        st.subheader("Ventaja competitiva (moat)")
         if tick.endswith("-USD"):
             st.caption("No aplica a criptomonedas.")
         else:
@@ -394,9 +395,9 @@ with tabs[1]:
                         for k, f in fmt.items()]
                 st.dataframe(pd.DataFrame(rows, columns=["Indicador", "Valor"]), hide_index=True, width="stretch")
                 st.markdown("**Moat probable** ✅" if r.get("Moat probable") else "**Moat probable** ✗")
-                st.caption("Ventaja competitiva duradera según Jiménez-Preciado et al. (2022): poca deuda de largo "
-                           "plazo respecto a utilidades y poca depreciación respecto a la utilidad bruta. Contexto; "
-                           "no entra al modelo.")
+                st.caption("Criterio de Jiménez-Preciado et al. (2022): bajo endeudamiento de largo plazo respecto a la "
+                           "utilidad neta y baja depreciación respecto a la utilidad bruta. Información contextual; "
+                           "no forma parte del conjunto de predictores.")
 
 
 # =====================================================================
@@ -404,15 +405,15 @@ with tabs[1]:
 # =====================================================================
 with tabs[2]:
     if "bancos_centrales" in DROPPED:
-        st.info("En este mercado las tasas de bancos centrales **no mejoraron** la predicción (se midió quitándolas), "
-                "así que el modelo no las usa. Se muestran como contexto económico.")
+        st.info("En este mercado las tasas de política monetaria **no mostraron contribución marginal** fuera de muestra "
+                "(análisis de ablación) y se excluyeron del modelo. Se presentan como contexto macrofinanciero.")
     else:
-        st.info("El modelo **sí usa** estas variables: el cambio de tasa a 90 días de ~40 bancos centrales, el ciclo "
-                "monetario global, los diferenciales de tasas contra la Fed y los indicadores de estrés de FRED.")
+        st.info("El modelo **incorpora** estas variables: la variación a 90 días de las tasas de ~40 bancos centrales, el "
+                "ciclo monetario global, los diferenciales de tasas frente a la Fed y los indicadores de estrés de FRED.")
     rates = load_rates()
-    since = st.slider("Mostrar desde", 2010, pd.Timestamp.today().year, 2018)
+    since = st.slider("Periodo desde", 2010, pd.Timestamp.today().year, 2018)
 
-    st.subheader("Bancos centrales clave")
+    st.subheader("Bancos centrales principales")
     key = [a for a in ["US", "XM", "MX", "GB", "JP", "BR"] if a in rates.columns]
     kc = st.columns(len(key))
     for col, a in zip(kc, key):
@@ -438,26 +439,26 @@ with tabs[2]:
     breadth = (((chg < 0).sum(axis=1) - (chg > 0).sum(axis=1)) / chg.notna().sum(axis=1)).loc[str(since):]
     bnow = breadth.dropna().iloc[-1]
     st.markdown(f"**Hoy: {bnow:+.0%}** → " + (
-        "la mayoría de los bancos centrales está **recortando** tasas (entorno de liquidez creciente)." if bnow > 0.15
-        else "la mayoría está **subiendo** tasas (endurecimiento global)." if bnow < -0.15
-        else "bancos centrales **divididos o en pausa**."))
+        "predominan los **recortes** de tasas (expansión de la liquidez global)." if bnow > 0.15
+        else "predominan las **alzas** de tasas (endurecimiento monetario global)." if bnow < -0.15
+        else "posturas **divergentes o en pausa**."))
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=breadth.index, y=breadth.clip(lower=0), fill="tozeroy", line=dict(width=0),
-                             fillcolor="rgba(30,158,90,.35)", name="Recortando"))
+                             fillcolor="rgba(30,158,90,.35)", name="Recortes"))
     fig.add_trace(go.Scatter(x=breadth.index, y=breadth.clip(upper=0), fill="tozeroy", line=dict(width=0),
-                             fillcolor="rgba(208,69,58,.35)", name="Subiendo"))
+                             fillcolor="rgba(208,69,58,.35)", name="Alzas"))
     fig.update_layout(yaxis_tickformat=".0%", yaxis_range=[-1, 1])
     st.plotly_chart(compact(fig, 260), width="stretch")
     how_to(X.HOW_TO_READ_CYCLE)
 
-    with st.expander("📋 Tabla de todos los bancos centrales"):
+    with st.expander("Tabla completa de bancos centrales"):
         summ = central_banks.summary(rates)
         st.dataframe(summ.style.format({"Tasa actual %": "{:.2f}", "Cambio 3m (pb)": "{:+.0f}", "Cambio 12m (pb)": "{:+.0f}"})
                      .background_gradient(cmap="RdYlGn_r", subset=["Cambio 12m (pb)"], vmin=-200, vmax=200),
                      width="stretch", hide_index=True, height=420)
-        st.caption("Fuente: BIS (Bank for International Settlements). Verde = recortes en 12 meses; rojo = alzas.")
+        st.caption("Fuente: BIS, base WS_CBPOL. Verde: recortes en 12 meses; rojo: alzas.")
 
-    st.subheader("Termómetros de estrés e incertidumbre (FRED)")
+    st.subheader("Indicadores de estrés financiero e incertidumbre (FRED)")
     fr = load_fred()
     if not fr.empty:
         cols2 = st.columns(2)
@@ -472,7 +473,7 @@ with tabs[2]:
                 level = "invertida"
             with cols2[i % 2].container(border=True):
                 st.markdown(f"**{meta['titulo']}**")
-                st.markdown(f"Hoy: **{now:.2f}** · nivel **{level}** (más alto que el {pctile:.0%} de los días desde 2010)")
+                st.markdown(f"Último dato: **{now:.2f}** · nivel **{level}** (percentil {pctile:.0%} desde 2010)")
                 ss = s.loc[str(since):]
                 fig = go.Figure(go.Scatter(x=ss.index, y=ss, line=dict(color="#e67e22", width=1.6), name=sid))
                 if sid == "T10Y2Y":
@@ -480,7 +481,7 @@ with tabs[2]:
                 fig.add_hline(y=float(s.loc["2010":].median()), line_dash="dot", line_color=GRAY,
                               annotation_text="mediana", annotation_position="top left")
                 st.plotly_chart(compact(fig, 200), width="stretch")
-                with st.expander("💡 Qué es y cómo interpretarlo"):
+                with st.expander("Definición e interpretación"):
                     st.markdown(f"{meta['que_es']}\n\n- **Alto:** {meta['alto']}\n- **Bajo:** {meta['bajo']}")
 
 
@@ -488,11 +489,12 @@ with tabs[2]:
 # 4. NOTICIAS (por sector → acción)
 # =====================================================================
 with tabs[3]:
-    st.info("Las noticias son **contexto para ti**: todavía no entran al modelo porque las fuentes gratuitas no dan "
-            "historia suficiente. Se guardan a diario y, al juntar ~1 año, se medirá si mejoran la predicción.")
+    st.info("Las noticias son **información contextual** y no forman parte del conjunto de predictores: las fuentes "
+            "gratuitas no ofrecen historia suficiente para validarlas. Se almacenan diariamente; con ~1 año de "
+            "historia se evaluará su contribución marginal.")
     sec_n = st.selectbox("Sector", sorted(FC["sector"].unique()), key="news_sector")
     tick_n = sorted(FC.loc[FC["sector"] == sec_n, "ticker"].unique())
-    if st.button(f"Cargar noticias de {sec_n} ({len(tick_n)} acciones)", type="primary"):
+    if st.button(f"Consultar noticias de {sec_n} ({len(tick_n)} emisoras)", type="primary"):
         st.session_state[f"news_{mk}_{sec_n}"] = {t: load_news(t, mk) for t in tick_n}
     loaded = st.session_state.get(f"news_{mk}_{sec_n}")
     if loaded:
@@ -506,103 +508,105 @@ with tabs[3]:
         for t in agg.index[::-1]:
             d = loaded[t]
             sig = FC[(FC["ticker"] == t) & (FC["horizon"] == (valid[0] if valid else hs[-1]))]["signal"]
-            with st.expander(f"{t} · tono {agg.loc[t, 'tono']:+.2f} · señal del modelo: {sig.iloc[0] if len(sig) else '–'}"):
+            with st.expander(f"{t} · tono {agg.loc[t, 'tono']:+.2f} · señal: {sig.iloc[0] if len(sig) else '–'}"):
                 if d.empty:
-                    st.caption("Sin noticias.")
+                    st.caption("No hay notas disponibles.")
                 for _, r in d.iterrows():
                     icon = "🟢" if r["sentiment"] > 0.15 else "🔴" if r["sentiment"] < -0.15 else "⚪"
                     when = r["published"].strftime("%d-%b-%Y") if pd.notna(r["published"]) else ""
                     st.markdown(f"{icon} [{r['title']}]({r['url']}) <span style='color:{GRAY};font-size:0.8em'>"
                                 f"· {r['source']} · {when}</span>", unsafe_allow_html=True)
-        how_to("El **tono** se calcula con VADER, un analizador de sentimiento léxico que puntúa cada titular de −1 "
-               "(muy negativo) a +1 (muy positivo). Es una lectura rápida del ánimo de la prensa, no un análisis "
-               "profundo: titulares neutros o técnicos quedan cerca de 0.", "¿Cómo se calcula el tono?")
+        how_to("El **tono** se calcula con VADER (Hutto y Gilbert, 2014), un clasificador léxico de sentimiento que asigna "
+               "a cada titular un puntaje de −1 (negativo) a +1 (positivo). Es una medida aproximada del sentimiento "
+               "de prensa; los titulares neutros o técnicos se ubican cerca de 0.", "Medición del tono")
     else:
-        st.caption("Elige un sector y presiona el botón (se consultan las noticias en ese momento).")
+        st.caption("Seleccionar un sector para consultar las notas recientes de sus emisoras.")
 
 
 # =====================================================================
-# 5. ¿QUÉ TAN CONFIABLE ES?
+# 5. VALIDACIÓN EMPÍRICA
 # =====================================================================
 with tabs[4]:
-    st.markdown("Todo lo de esta pestaña se midió con datos que el modelo **no vio al entrenar** (validación "
-                "*walk-forward*), simulando cómo habría funcionado en el pasado reciente.")
+    st.markdown("Los resultados de esta sección son **fuera de muestra**: se obtienen mediante validación *walk-forward* "
+                "con purga, sobre periodos no utilizados en la estimación.")
     experiments_table()
     if GATE:
-        st.subheader("Veredicto por plazo")
+        st.subheader("Resultado por horizonte")
         gc = st.columns(len(GATE))
         for col, (h, v) in zip(gc, sorted(GATE.items())):
             with col.container(border=True):
                 ev = evidence(h)
                 st.markdown(f"### {hl(h)} {({'fuerte': '✅', 'moderada': '🟡'}).get(ev, '❌')}")
-                st.markdown(f"**{({'fuerte': 'Evidencia fuerte', 'moderada': 'Evidencia moderada'}).get(ev, 'Sin ventaja demostrada')}**")
-                lines = [f"- Ordena mejor que el azar: **{'sí' if v['p_value_ic'] < 0.05 else 'no'}** "
+                st.markdown(f"**{({'fuerte': 'Evidencia fuerte', 'moderada': 'Evidencia moderada'}).get(ev, 'Sin evidencia')}**")
+                lines = [f"- Ordenamiento superior al azar: **{'sí' if v['p_value_ic'] < 0.05 else 'no'}** "
                          f"(IC {v['ic']:.3f}, p={v['p_value_ic']:.3f})",
-                         f"- Long-short gana: **{'sí' if v['sharpe_long_short'] >= 0.3 else 'no'}** "
+                         f"- Cartera long-short rentable: **{'sí' if v['sharpe_long_short'] >= 0.3 else 'no'}** "
                          f"(Sharpe {v['sharpe_long_short']:.2f}, p={v['p_value_sharpe']:.3f})"]
                 if v.get("dsr") is not None:
-                    lines.append(f"- Sobrevive a {v.get('n_trials', '?')} pruebas: "
+                    lines.append(f"- Supera la corrección por {v.get('n_trials', '?')} pruebas: "
                                  f"**{'sí' if v['dsr'] >= CFG['gate'].get('min_dsr', 0.95) else 'no'}** "
                                  f"(Deflated Sharpe {v['dsr']:.0%})")
-                lines.append(f"- Modelo: {v['engine']}" + (" · selección anidada" if v.get("method") == "nested" else ""))
+                lines.append(f"- Especificación: {v['engine']}" + (" · selección anidada" if v.get("method") == "nested" else ""))
                 st.markdown("\n".join(lines))
-        how_to("- **IC**: qué tan bien ordena las acciones (0 = como el azar; 0.05–0.10 ya es valioso en finanzas).\n"
-               "- **Sharpe long-short**: ganancia por unidad de riesgo de comprar las mejores y vender en corto las "
-               "peores, con costos. > 0.5 aceptable, > 1 muy bueno.\n"
-               "- **p**: probabilidad de que el resultado sea suerte. < 0.05 → evidencia real.\n"
-               "- **Deflated Sharpe**: probabilidad de que la ganancia sea real *después de descontar* que se probaron "
-               "muchas configuraciones (modelos × plazos). Se exige ≥ 95%.\n"
-               "- **Selección anidada**: el modelo de cada periodo de prueba se eligió sólo con periodos anteriores, "
-               "así que el resultado no está inflado por haber escogido 'el mejor' mirando todo.\n"
-               "- ✅ **Fuerte**: cumple todo lo anterior. 🟡 **Moderada**: ordena mejor que el azar y gana, pero no "
-               "llega al 95% de Deflated Sharpe. ❌ **Ninguna**: sin señal.",
-               "¿Qué significan estos números?")
+        how_to("- **IC**: correlación de rangos entre pronóstico y retorno observado (0 = sin información; 0.03–0.10 es "
+               "económicamente relevante).\n"
+               "- **Sharpe long-short**: rendimiento por unidad de riesgo de la cartera larga en el quintil superior y "
+               "corta en el inferior, neto de costos.\n"
+               "- **p**: p-valor de la prueba de permutación frente a la hipótesis nula de ordenamiento aleatorio.\n"
+               "- **Deflated Sharpe**: probabilidad de que el Sharpe verdadero sea positivo, corrigiendo por el número "
+               "de especificaciones evaluadas (modelos × horizontes). Umbral: 95%.\n"
+               "- **Selección anidada**: la especificación de cada bloque se elige sólo con bloques anteriores, lo que "
+               "elimina el sesgo de selección *ex post*.\n"
+               "- ✅ **Fuerte**: satisface todos los criterios. 🟡 **Moderada**: IC y Sharpe significativos, Deflated "
+               "Sharpe inferior a 95%. ❌ **Ninguna**: no se rechaza la hipótesis nula.",
+               "Definición de los indicadores")
 
-    st.subheader("📡 Seguimiento en vivo")
+    st.subheader("Seguimiento en tiempo real")
     live = load_tracking(mk, stamp)
     if live.empty:
-        st.info("Todavía no vence ningún pronóstico guardado. Cada corrida diaria guarda sus pronósticos; cuando "
-                "llega la fecha objetivo se comparan aquí con lo que realmente pasó. Es la prueba más honesta "
-                "porque no involucra ninguna selección posterior.")
+        st.info("Aún no vence ningún pronóstico registrado. Cada ejecución diaria almacena sus pronósticos, que se contrastan "
+                "con el retorno realizado al llegar la fecha objetivo. Es la evaluación más estricta, pues no admite "
+                "ninguna selección posterior.")
     else:
         st.dataframe(live.assign(horizon=live["horizon"].map(hl)).rename(columns={
             "horizon": "Plazo", "fechas": "Fechas de pronóstico", "pronosticos": "Pronósticos vencidos",
-            "ic_real": "IC real", "long_short_real": "Long-short real (prom.)", "cobertura_real": "Dentro del rango p10–p90"})
-            .style.format({"IC real": "{:.3f}", "Long-short real (prom.)": "{:+.2%}", "Dentro del rango p10–p90": "{:.0%}"}),
+            "ic_real": "IC real", "long_short_real": "Long-short realizado (prom.)", "cobertura_real": "Cobertura p10–p90 realizada"})
+            .style.format({"IC real": "{:.3f}", "Long-short realizado (prom.)": "{:+.2%}", "Cobertura p10–p90 realizada": "{:.0%}"}),
             hide_index=True, width="stretch")
-        st.caption("Con pocas fechas el resultado es muy ruidoso; se vuelve informativo después de varios meses.")
+        st.caption("Con pocas fechas la estimación tiene alta varianza; adquiere poder estadístico tras varios meses.")
 
     bt = A["backtest"]
     if not bt.empty:
         hb = CFG["backtest"]["horizon"]
-        st.subheader(f"¿Cuánto habría ganado? (rebalanceo cada {hl(hb)}, con costos)")
-        names = {"long_short": ("Estrategia long-short (compra mejores, vende peores)", BLUE, 3),
-                 "estrategia": ("Sólo comprar las mejores", GREEN, 1.6),
-                 "equiponderado": ("Comprar todas por igual", GRAY, 1.4),
+        st.subheader(f"Desempeño simulado fuera de muestra (rebalanceo cada {hl(hb)}, neto de costos)")
+        names = {"long_short": ("Cartera long-short (quintil superior − inferior)", BLUE, 3),
+                 "estrategia": ("Cartera larga (quintil superior)", GREEN, 1.6),
+                 "equiponderado": ("Cartera equiponderada del universo", GRAY, 1.4),
                  "benchmark": (f"Índice {M.benchmark}", "#f0a202", 1.4)}
         fig = go.Figure()
         for k, (label, color, w) in names.items():
             if f"{k}_equity" in bt:
                 fig.add_trace(go.Scatter(x=bt.index, y=(bt[f"{k}_equity"] - 1), name=label, line=dict(color=color, width=w)))
         fig.add_hline(y=0, line_color=GRAY, line_dash="dot")
-        fig.update_layout(yaxis_tickformat="+.0%", yaxis_title="Ganancia acumulada")
+        fig.update_layout(yaxis_tickformat="+.0%", yaxis_title="Rendimiento acumulado")
         st.plotly_chart(compact(fig, 380), width="stretch")
         summ = INFO.get("metrics", {}).get("backtest", {})
         if summ:
             label_map = {k: v[0] for k, v in names.items()}
             tb = pd.DataFrame(summ).T.rename(index=label_map).rename(columns={
-                "retorno_total": "Ganancia total", "cagr": "Por año", "sharpe": "Sharpe", "max_drawdown": "Peor caída"})
-            st.dataframe(tb.style.format({"Ganancia total": "{:+.1%}", "Por año": "{:+.1%}", "Sharpe": "{:.2f}",
-                                          "Peor caída": "{:.1%}"}), width="stretch")
-        how_to("- La **línea azul gruesa** es lo que el modelo sabe hacer: ganar con la *diferencia* entre las "
-               "mejores y las peores, sin depender de que el mercado suba.\n"
-               "- **Sólo comprar las mejores** depende también de la dirección del mercado.\n"
-               "- Si la línea azul sube de forma constante, el ranking funciona; si es plana o cae, no.\n"
-               "- **Peor caída** (drawdown): la mayor pérdida desde un máximo que habrías tenido que aguantar.\n"
-               "- Incluye 10 pb de costo por operación y 50 pb anuales por pedir prestadas las acciones en corto.")
+                "retorno_total": "Rendimiento acumulado", "cagr": "Tasa anual compuesta", "sharpe": "Sharpe", "max_drawdown": "Drawdown máximo"})
+            st.dataframe(tb.style.format({"Rendimiento acumulado": "{:+.1%}", "Tasa anual compuesta": "{:+.1%}", "Sharpe": "{:.2f}",
+                                          "Drawdown máximo": "{:.1%}"}), width="stretch")
+        how_to("- La **cartera long-short** (línea azul) aísla el contenido predictivo del ordenamiento: su rendimiento "
+               "depende del diferencial entre quintiles y no de la dirección del mercado.\n"
+               "- La **cartera larga** combina ese diferencial con la exposición al mercado (beta).\n"
+               "- Una trayectoria creciente y estable de la cartera long-short indica un ordenamiento informativo.\n"
+               "- **Drawdown máximo**: mayor pérdida acumulada desde un máximo previo.\n"
+               f"- Neto de {M.cost_bps if M.cost_bps is not None else CFG['backtest']['cost_bps']:g} pb por operación "
+               "sobre la rotación neta y de 50 pb anuales por préstamo de valores.")
 
     if A["ablation"]:
-        st.subheader("¿Qué información le sirve al modelo?")
+        st.subheader("Contribución marginal por familia de variables (ablación)")
         contrib = pd.DataFrame(A["ablation"]["contribution"]).set_index("grupo")
         contrib = contrib.rename(index=lambda g: GROUPS.get(g, g).split(" (")[0])
         v = contrib["aporte_sharpe"].sort_values()
@@ -612,19 +616,19 @@ with tabs[4]:
                                hovertemplate="%{y}<br>Aporte al Sharpe: %{x:+.2f}<br>Aporte al IC: "
                                              "%{customdata:+.3f}<extra></extra>"))
         fig.add_vline(x=0, line_color=GRAY)
-        fig.update_layout(xaxis_title="Cuánto empeora el Sharpe long-short si se quita el grupo", hovermode="closest")
+        fig.update_layout(xaxis_title="Reducción del Sharpe long-short al excluir la familia", hovermode="closest")
         st.plotly_chart(compact(fig, 240), width="stretch")
         if DROPPED:
-            st.caption("Descartado(s) en este mercado por no aportar: **"
+            st.caption("Familias excluidas en este mercado por contribución nula o negativa: **"
                        + ", ".join(GROUPS.get(g, g).split(" (")[0] for g in DROPPED) + "**.")
-        how_to("Se reentrenó el modelo quitando un grupo de variables a la vez. Barra **verde** = sin ese grupo la "
-               "estrategia gana menos, o sea, el grupo **sirve**. Barra **gris** (≤ 0) = quitarlo da igual o "
-               "mejora: el grupo se descarta automáticamente para no saturar al modelo con ruido.")
+        how_to("El modelo se reestima excluyendo una familia de variables a la vez. Barra **verde**: la exclusión reduce "
+               "el Sharpe fuera de muestra, por lo que la familia aporta información. Barra **gris** (≤ 0): la "
+               "exclusión no lo reduce; la familia se elimina automáticamente para limitar el sobreajuste.")
 
     imp = A["importance"]
     if not imp.empty:
-        st.subheader("Variables con más peso")
-        h_sel = st.segmented_control("Plazo", list(imp.columns), default=imp.columns[-1],
+        st.subheader("Importancia de las variables")
+        h_sel = st.segmented_control("Horizonte", list(imp.columns), default=imp.columns[-1],
                                      format_func=lambda c: hl(c.lstrip("h")), key="imp_h") or imp.columns[-1]
         top = imp[h_sel].sort_values().tail(15)
         info = glossary.table(top.index).set_index("variable")
@@ -634,15 +638,15 @@ with tabs[4]:
                            "Tasas de bancos centrales": "#7d4cdb"}.get(info.loc[c, "grupo"], "#e67e22") for c in top.index],
             customdata=[[c, info.loc[c, "descripcion"], info.loc[c, "grupo"]] for c in top.index],
             hovertemplate="<b>%{y}</b><br>%{customdata[1]}<br><i>%{customdata[2]}</i> · peso %{x:.1%}<extra></extra>"))
-        fig.update_layout(xaxis_tickformat=".0%", xaxis_title="Peso en el modelo", hovermode="closest")
+        fig.update_layout(xaxis_tickformat=".0%", xaxis_title="Importancia relativa (ganancia)", hovermode="closest")
         st.plotly_chart(compact(fig, 480), width="stretch")
-        st.caption("Color = familia: azul técnicos · naranja macro · morado bancos centrales · ocre estrés (FRED). "
-                   "Pasa el mouse para ver qué mide cada variable.")
+        st.caption("Color por familia: azul, técnicos; naranja, mercado y macro; morado, bancos centrales; ocre, estrés "
+                   "financiero (FRED). La definición de cada variable aparece al posicionar el cursor.")
 
-    with st.expander("🔬 Detalle técnico: comparación de todos los modelos"):
+    with st.expander("Anexo técnico: comparación de especificaciones"):
         cmp = A["comparison"]
         if cmp.empty:
-            st.caption("Ejecuta `stockcast compare` para generarla.")
+            st.caption("Para generarla: `stockcast compare`.")
         else:
             show = cmp.rename(columns={"horizon": "Plazo (d)", "engine": "Modelo", "ic": "IC", "p_value_ic": "p IC",
                                        "dsr": "Deflated Sharpe",
@@ -653,30 +657,30 @@ with tabs[4]:
                                 "Acierto dirección",
                                 "'Siempre sube'", "Cobertura p10–p90", "Segundos"] if c in show]
             st.dataframe(show[keep].style.format(precision=3, na_rep="–"), hide_index=True, width="stretch")
-            st.caption("naive = caminata aleatoria (retorno esperado 0); momentum = sólo retorno de 6 meses; ridge = "
-                       "lineal; lightgbm = árboles; ensemble = promedio de lightgbm y ridge; nested = selección anidada (lo que de "
-                       "verdad se usa). Ningún modelo predice la "
-                       "dirección mejor que 'siempre sube'; el valor está en el orden relativo (IC).")
+            st.caption("naive: caminata aleatoria (retorno esperado nulo); momentum: retorno de 6 meses; ridge: regresión lineal "
+                       "regularizada; lightgbm: gradient boosting cuantil; ensemble: promedio de lightgbm y ridge; nested: "
+                       "selección anidada (especificación en uso). Ninguna especificación supera a la regla 'siempre sube' "
+                       "en acierto direccional; el contenido predictivo reside en el ordenamiento relativo (IC).")
 
 
 # =====================================================================
-# 6. CÓMO FUNCIONA
+# 6. METODOLOGÍA
 # =====================================================================
 with tabs[5]:
     st.markdown(X.METHOD)
-    st.subheader("Glosario")
+    st.subheader("Glosario de conceptos")
     gcols = st.columns(2)
     for i, (k, v) in enumerate(X.CONCEPTS.items()):
         with gcols[i % 2].expander(k):
             st.markdown(v)
-    st.subheader("📖 Diccionario de variables de este mercado")
+    st.subheader("Diccionario de variables del mercado")
     cols_used = list(A["importance"].index) if not A["importance"].empty else []
     if cols_used:
         dic = glossary.table(cols_used)
-        q = st.text_input("Buscar variable", placeholder="p. ej. volatilidad, Fed, dólar, momentum…")
+        q = st.text_input("Buscar variable", placeholder="p. ej., volatilidad, Fed, dólar, momentum")
         if q:
             dic = dic[dic.apply(lambda r: q.lower() in " ".join(map(str, r.values)).lower(), axis=1)]
         st.dataframe(dic.rename(columns={"variable": "Código", "nombre": "Nombre", "descripcion": "Qué mide",
                                          "grupo": "Familia"})[["Familia", "Nombre", "Qué mide", "Código"]],
                      hide_index=True, width="stretch", height=min(45 + 35 * len(dic), 560))
-        st.caption(f"{len(dic)} variables en este mercado. Lista completa: docs/VARIABLES.md")
+        st.caption(f"{len(dic)} variables en este mercado. Diccionario completo: docs/VARIABLES.md")

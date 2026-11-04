@@ -20,36 +20,11 @@ import subprocess
 import sys
 
 from stockcast import config
+from stockcast.lock import RunLock as _Lock
 from stockcast.models import ENGINES
 
 
 HEAVY = {"run", "compare", "ablation", "predict", "data", "evaluate"}
-
-
-class _Lock:
-    """Candado entre procesos: evita que dos corridas pesadas (p. ej. el timer diario y una manual) compitan
-    por los núcleos, lo que hace que LightGBM se vuelva decenas de veces más lento."""
-
-    def __init__(self):
-        self.path = config.path("data") / ".stockcast.lock"
-        self.fh = None
-
-    def __enter__(self):
-        try:
-            import fcntl
-        except ImportError:  # Windows: sin candado
-            return self
-        self.fh = open(self.path, "w")
-        try:
-            fcntl.flock(self.fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            logging.getLogger("stockcast").info("Otra corrida de stockcast está en curso; esperando a que termine…")
-            fcntl.flock(self.fh, fcntl.LOCK_EX)
-        return self
-
-    def __exit__(self, *exc):
-        if self.fh:
-            self.fh.close()
 
 
 def _markets(arg: str) -> list[str]:

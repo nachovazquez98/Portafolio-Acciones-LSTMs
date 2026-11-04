@@ -1,209 +1,225 @@
 """Textos explicativos del dashboard (separados del código de la interfaz para que sea fácil editarlos)."""
 
 INTRO = """
-**stockcast** estima qué acciones tienen más probabilidad de **ganarle al resto de su mercado** en los próximos
-días, y cuáles de quedarse atrás. No predice el precio exacto: **ordena** las acciones de mejor a peor
-perspectiva. Comprar las de arriba y vender en corto las de abajo es lo que se comprobó que funciona.
+**stockcast** estima retornos esperados de corte transversal: en cada fecha ordena las emisoras de un mismo
+mercado según su retorno esperado relativo en el horizonte seleccionado. El objeto de estimación no es el nivel
+del precio ni la dirección del mercado, sino la **prima relativa** entre activos, explotable mediante una cartera
+*long-short* (largo en el quintil superior, corto en el inferior) neutral al mercado.
 """
 
 HOW_TO_READ_SIGNALS = """
-- **COMPRA**: está en el 20% de acciones con mejor retorno esperado del mercado para ese plazo.
-- **VENTA EN CORTO**: está en el 20% con peor retorno esperado. Es una señal **relativa**: se espera que le vaya
-  peor que al resto, no necesariamente que baje. Úsala **en pareja con las compras** (estrategia long-short,
-  neutral al mercado). Sola, en un mercado alcista, puede perder.
-- **NEUTRAL**: en medio del ranking; sin ventaja clara.
-- **SIN SEÑAL**: en este plazo el modelo **no demostró** ganar más que el azar en el pasado, así que no se
-  recomienda operar con él (se muestra sólo como referencia).
-- **Nivel de evidencia del plazo**: ✅ *fuerte* = la ganancia sobrevive incluso a la corrección por haber probado
-  muchas configuraciones. 🟡 *moderada* = ordena mejor que el azar y ganó en la validación, pero esa ganancia
-  todavía podría ser suerte (Deflated Sharpe < 95%). Con evidencia moderada conviene operar poco o en *paper*.
-- **Retorno esperado**: la *mediana* del pronóstico (escenario central).
-- **Rango p10 – p90**: en 8 de cada 10 casos el retorno real cayó dentro de este rango durante la validación.
-  Un rango ancho significa más incertidumbre.
+- **COMPRA**: la emisora pertenece al quintil superior de retorno esperado del mercado en ese horizonte.
+- **VENTA EN CORTO**: pertenece al quintil inferior. La señal es **relativa**: indica un desempeño esperado
+  inferior al del resto del universo, no necesariamente un rendimiento negativo. Su interpretación correcta es
+  como la pata corta de una cartera long-short; aislada, en un mercado alcista, puede generar pérdidas.
+- **NEUTRAL**: quintiles intermedios; sin ventaja esperada significativa.
+- **SIN SEÑAL**: en ese horizonte el modelo no superó, fuera de muestra, a la hipótesis nula de ordenamiento
+  aleatorio. Los pronósticos se presentan sólo con fines descriptivos.
+- **Nivel de evidencia del horizonte**: ✅ *fuerte* = la rentabilidad ajustada por riesgo y costos se mantiene tras
+  la corrección por pruebas múltiples (Deflated Sharpe ≥ 95%). 🟡 *moderada* = el ordenamiento es superior al
+  azar y la cartera fue rentable fuera de muestra, pero no se descarta que la rentabilidad obedezca al número de
+  especificaciones evaluadas (Deflated Sharpe < 95%). Con evidencia moderada se recomienda exposición reducida o
+  simulación (*paper trading*).
+- **Retorno esperado**: mediana condicional del pronóstico (cuantil 0.5).
+- **Intervalo p10 – p90**: intervalo de predicción al 80%, calibrado de forma conformal; en la validación, el 80%
+  de los retornos observados cayó dentro de él. Su amplitud refleja la incertidumbre del pronóstico.
 """
 
 HOW_TO_READ_RANGE = """
-Cada punto es el **retorno esperado** (mediana) y la línea es el **rango probable** (p10 – p90).
-- Si el punto está a la derecha del 0, el escenario central es de ganancia.
-- Una línea larga indica una acción más volátil o más incierta.
-- Lo importante es la **posición relativa**: las de arriba tienen mejores perspectivas que las de abajo.
+Cada punto representa la **mediana condicional** del retorno y el segmento el **intervalo de predicción p10 – p90**.
+- Un punto a la derecha de 0 implica un escenario central de rendimiento positivo.
+- La amplitud del segmento aproxima la volatilidad condicional de la emisora.
+- La información relevante es la **posición relativa** en el ordenamiento, no el nivel absoluto del pronóstico.
 """
 
 HOW_TO_READ_STOCK_CHART = """
-- **Velas**: cada vela es un día. Verde = cerró arriba de su apertura; roja = abajo. Las mechas muestran el
-  máximo y el mínimo del día.
-- **Media de 50 días (naranja)**: tendencia de corto/mediano plazo. **Media de 200 días (morada)**: tendencia de
-  largo plazo. Precio arriba de ambas suele indicar tendencia alcista sana.
-- **Abanico azul**: pronóstico del modelo. La línea punteada es el escenario central y la zona sombreada el
-  rango p10 – p90. Se abre con el tiempo porque la incertidumbre crece con el plazo.
-- **RSI (abajo)**: fuerza de las subidas recientes contra las bajadas (0 – 100). Arriba de 70 = sobrecompra
-  (subió muy rápido, podría corregir). Abajo de 30 = sobreventa (cayó muy rápido, podría rebotar).
+- **Velas**: rango diario de apertura, máximo, mínimo y cierre. Verde: cierre superior a la apertura; rojo: inferior.
+- **Media móvil de 50 días** (naranja) y **de 200 días** (morada): tendencia de mediano y largo plazo. Un precio
+  por encima de ambas se asocia con una tendencia alcista.
+- **Abanico azul**: pronóstico del modelo. La línea discontinua es la mediana condicional y la zona sombreada el
+  intervalo p10 – p90, que se amplía con el horizonte porque la varianza del retorno acumulado crece con él.
+- **RSI (14)**: razón entre la magnitud de las alzas y de las bajas recientes (escala 0 – 100). Valores superiores a
+  70 indican sobrecompra; inferiores a 30, sobreventa.
 """
 
 HOW_TO_READ_RATES = """
-Cada línea es la **tasa de interés de referencia** que fija un banco central (lo que cuesta el dinero a un día).
-- **Subidas** (política *restrictiva*): el banco frena la economía para bajar la inflación. Suelen presionar a
-  la baja a las acciones, sobre todo a las de crecimiento y a las más endeudadas.
-- **Bajadas** (política *expansiva*): abaratan el crédito y suelen favorecer a las acciones.
-- Lo que más mueve a los mercados es el **cambio** de la tasa y la **dirección del ciclo**, no el nivel. Por eso
-  el modelo usa el cambio en 90 días, no la tasa en sí.
+Cada serie es la **tasa de política monetaria** fijada por el banco central (costo del dinero a un día).
+- **Alzas** (postura restrictiva): elevan la tasa de descuento y endurecen las condiciones financieras; tienden a
+  presionar las valuaciones, en particular de emisoras de crecimiento (mayor duración de sus flujos) y apalancadas.
+- **Recortes** (postura expansiva): abaratan el financiamiento y tienden a favorecer a los activos de riesgo.
+- Los precios de los activos reaccionan principalmente al **cambio** de la tasa y a la **dirección del ciclo**,
+  más que a su nivel; por ello el modelo emplea la variación a 90 días.
 """
 
 HOW_TO_READ_CYCLE = """
-Resume a todos los bancos centrales en una sola línea:
+Indicador de difusión del ciclo monetario global:
 **(bancos que recortaron − bancos que subieron) / total**, en los últimos 90 días.
-- **Positivo** (zona arriba de 0): la mayoría está bajando tasas → liquidez global en aumento, entorno
-  favorable para activos de riesgo.
-- **Negativo**: la mayoría está subiendo tasas (como en 2022) → endurecimiento global.
-- Cerca de 0: bancos divididos o en pausa.
+- **Positivo**: predominan los recortes; expansión de la liquidez global, entorno favorable a activos de riesgo.
+- **Negativo**: predominan las alzas (p. ej., 2022); endurecimiento monetario sincronizado.
+- **Cercano a 0**: posturas divergentes o pausa generalizada.
 """
 
 FRED_SERIES = {
     "USEPUINDXD": {
         "titulo": "Incertidumbre de política económica (EE. UU.)",
-        "que_es": "Índice de Baker, Bloom y Davis basado en cuántas notas de prensa hablan de incertidumbre "
-                  "económica y de política (aranceles, impuestos, regulación). Promedio de 30 días.",
-        "alto": "Alta incertidumbre: las empresas posponen inversión y los mercados exigen más premio por riesgo; "
-                "suele acompañar caídas y más volatilidad.",
-        "bajo": "Baja incertidumbre: entorno más predecible, normalmente favorable para las acciones.",
+        "que_es": "Índice de Baker, Bloom y Davis (2016), construido a partir de la frecuencia de términos de "
+                  "incertidumbre económica y de política (aranceles, impuestos, regulación) en la prensa. Promedio "
+                  "móvil de 30 días.",
+        "alto": "Incertidumbre elevada: posposición de decisiones de inversión y mayor prima de riesgo exigida; "
+                "suele coincidir con caídas y aumentos de volatilidad.",
+        "bajo": "Incertidumbre reducida: entorno más predecible, normalmente favorable para la renta variable.",
     },
     "BAA10Y": {
-        "titulo": "Spread corporativo Baa − Tesoro (estrés crediticio)",
-        "que_es": "Cuánto más interés pagan las empresas con calificación Baa (el escalón más bajo de grado de "
-                  "inversión) que el bono del Tesoro a 10 años, en puntos porcentuales. Es un termómetro clásico "
-                  "del miedo en el mercado de crédito (Gilchrist y Zakrajšek, 2012).",
-        "alto": "Spread alto: los inversionistas temen impagos; históricamente coincide con recesiones y "
-                "mercados bajistas (2008, 2020).",
-        "bajo": "Spread bajo: crédito barato y apetito por riesgo; entorno favorable, aunque niveles muy bajos "
-                "pueden indicar complacencia.",
+        "titulo": "Diferencial corporativo Baa − Tesoro a 10 años",
+        "que_es": "Prima que pagan los bonos corporativos calificados Baa (el escalón inferior del grado de "
+                  "inversión) sobre el bono del Tesoro a 10 años, en puntos porcentuales. Indicador estándar de "
+                  "estrés crediticio y del ciclo financiero (Gilchrist y Zakrajšek, 2012).",
+        "alto": "Diferencial amplio: mayor probabilidad percibida de incumplimiento; históricamente asociado con "
+                "recesiones y mercados bajistas (2008, 2020).",
+        "bajo": "Diferencial estrecho: condiciones crediticias holgadas y apetito por riesgo; niveles muy bajos "
+                "pueden reflejar una valuación complaciente del riesgo.",
     },
     "T10Y2Y": {
         "titulo": "Pendiente de la curva de rendimientos (10 años − 2 años)",
-        "que_es": "Diferencia entre la tasa del bono del Tesoro a 10 años y a 2 años. Normalmente es positiva "
-                  "(prestar a más plazo paga más).",
-        "alto": "Curva positiva y empinada: el mercado espera crecimiento; típico de recuperaciones.",
-        "bajo": "Curva **invertida** (negativa): el mercado anticipa recortes de tasas por una desaceleración. "
-                "Ha precedido a casi todas las recesiones de EE. UU. desde 1970, con 6 a 24 meses de anticipación.",
+        "que_es": "Diferencia entre los rendimientos del Tesoro a 10 y a 2 años. En condiciones normales es positiva, "
+                  "por la prima por plazo.",
+        "alto": "Pendiente positiva y pronunciada: expectativas de crecimiento; típica de fases de recuperación.",
+        "bajo": "Curva **invertida** (negativa): el mercado descuenta recortes ante una desaceleración. Ha antecedido "
+                "a casi todas las recesiones de EE. UU. desde 1970, con 6 a 24 meses de anticipación "
+                "(Estrella y Mishkin, 1998).",
     },
     "DGS2": {
-        "titulo": "Tasa del Tesoro a 2 años",
-        "que_es": "Rendimiento del bono del gobierno de EE. UU. a 2 años. Resume lo que el mercado espera que haga "
-                  "la Fed en los próximos dos años (Gürkaynak, Sack y Swanson, 2005). El modelo usa su cambio.",
-        "alto": "Subiendo rápido: el mercado anticipa más alzas de la Fed; suele presionar a las acciones de "
+        "titulo": "Rendimiento del Tesoro a 2 años",
+        "que_es": "Resume la trayectoria esperada de la tasa de fondos federales en los dos años siguientes "
+                  "(Gürkaynak, Sack y Swanson, 2005). El modelo emplea su variación.",
+        "alto": "Alza acelerada: el mercado anticipa una política más restrictiva; presión sobre emisoras de "
                 "crecimiento.",
-        "bajo": "Bajando rápido: el mercado anticipa recortes, a menudo por miedo a una desaceleración.",
+        "bajo": "Caída acelerada: el mercado anticipa recortes, con frecuencia por expectativas de desaceleración.",
     },
     "DFII10": {
-        "titulo": "Tasa real a 10 años (bonos TIPS)",
-        "que_es": "Rendimiento del bono a 10 años **descontando la inflación esperada**. Es el costo real del dinero "
-                  "a largo plazo.",
-        "alto": "Tasa real alta: el dinero 'sin riesgo' rinde mucho, así que las acciones (sobre todo las de "
-                "crecimiento y tecnología) valen menos en valor presente.",
-        "bajo": "Tasa real baja o negativa: impulsa las valuaciones de las acciones y del oro.",
+        "titulo": "Tasa real a 10 años (TIPS)",
+        "que_es": "Rendimiento del bono indexado a la inflación a 10 años; aproxima el costo real del capital a "
+                  "largo plazo.",
+        "alto": "Tasa real elevada: mayor tasa de descuento, lo que reduce el valor presente de los flujos, en "
+                "particular de emisoras de larga duración (tecnología, crecimiento).",
+        "bajo": "Tasa real baja o negativa: sostiene valuaciones elevadas de renta variable y del oro.",
     },
 }
 
 METHOD = """
-### 1. Qué problema resuelve
+### 1. Objeto de estimación
 
-En términos de economía financiera, el modelo estima **retornos esperados de corte transversal**. En cada fecha
-pregunta qué acciones de un mismo mercado rendirán más que las otras en los próximos *h* días hábiles
-(*h* = 1, 5, 10 o 21). No intenta adivinar si el mercado completo sube o baja (el *timing* de mercado es mucho
-más difícil). Busca la **prima relativa** entre acciones, que es la base de los fondos *long-short*.
+El sistema estima **retornos esperados de corte transversal**: en cada fecha *t* ordena las emisoras de un mismo
+mercado según su rendimiento esperado en los *h* días hábiles siguientes (*h* = 5, 10 o 21). No se intenta
+pronosticar la dirección del mercado agregado (*market timing*), cuya predictibilidad fuera de muestra es
+notoriamente débil (Welch y Goyal, 2008), sino la **prima relativa** entre activos, fundamento de las carteras
+*long-short*.
 
-### 2. Variable objetivo
+### 2. Variable dependiente
 
-Para cada acción *i* y fecha *t*, el objetivo es el **retorno logarítmico futuro**
-`y = ln(P(t+h) / P(t))`. Se usan retornos y no precios porque los precios son no estacionarios. Un modelo que
-"predice" el precio de mañana igual al de hoy parece muy preciso y no aporta nada; ese era el problema del LSTM
-original.
+Para cada emisora *i* y fecha *t*, la variable dependiente es el **retorno logarítmico futuro**
+`y(i,t) = ln(P(i,t+h) / P(i,t))`. Se modelan retornos y no niveles de precio porque estos últimos son no
+estacionarios: un pronóstico que reproduce el último precio observado minimiza el error de nivel sin contener
+información alguna sobre el retorno.
 
-### 3. Variables explicativas (*factores*)
+### 3. Variables explicativas
 
-Todas se calculan **sólo con información disponible al cierre de t**, sin mirar el futuro:
+Todas se construyen **exclusivamente con información disponible al cierre de *t*** (sin sesgo de anticipación):
 
-| Familia | Ejemplos | Intuición económica |
+| Familia | Ejemplos | Fundamento económico |
 |---|---|---|
-| **Momentum y reversión** | retorno a 1, 5, 21, 63 y 126 días; momentum relativo al mercado | Las ganadoras de 3 a 12 meses tienden a seguir ganando (Jegadeesh y Titman, 1993); a 1 semana hay reversión de corto plazo. |
-| **Riesgo** | volatilidad 5/21/63 d, ATR, distancia al máximo anual | Anomalía de baja volatilidad: las acciones menos riesgosas rinden más de lo que el CAPM predice. |
-| **Técnicos** | RSI, MACD, Bollinger, estocástico, volumen anormal | Presión de compra o venta de corto plazo y sobrerreacción. |
-| **Macro y mercado** | S&P 500, IPC, VIX, tasa a 10 años, dólar, petróleo, tipo de cambio | Cada acción tiene distinta sensibilidad (beta) a estos choques; el modelo aprende quién gana en cada entorno. |
-| **Política monetaria** | cambio de tasa de 40 bancos centrales, ciclo global, diferenciales con la Fed | Canal de tasas y de liquidez: el costo del dinero cambia el valor presente de los flujos y el apetito por riesgo. |
-| **Estrés financiero** | spread *high yield*, curva 10a-2a, tasa real, incertidumbre de política | Indicadores adelantados de régimen: en estrés, las acciones defensivas superan a las cíclicas. |
+| **Momentum y reversión** | retornos a 1, 5, 21, 63 y 126 días; momentum relativo al mercado | Persistencia de rendimientos a 3–12 meses (Jegadeesh y Titman, 1993) y reversión de corto plazo (Lehmann, 1990). |
+| **Riesgo** | volatilidad a 5/21/63 días, ATR, distancia al máximo anual | Anomalía de baja volatilidad (Ang et al., 2006; Frazzini y Pedersen, 2014). |
+| **Indicadores técnicos** | RSI, MACD, bandas de Bollinger, estocástico, volumen anormal | Presión de órdenes de corto plazo y sobrerreacción. |
+| **Mercado y macro** | índice de referencia, VIX, tasa a 10 años, dólar, petróleo, tipo de cambio | Exposiciones heterogéneas (betas) a choques comunes; el modelo aprende qué emisoras se benefician en cada régimen. |
+| **Política monetaria** | variación de la tasa de ~40 bancos centrales (BIS), ciclo global, diferenciales contra la Fed | Canal de tasas y de liquidez: el costo del capital modifica el valor presente de los flujos y la tolerancia al riesgo. |
+| **Estrés financiero** | diferencial Baa, pendiente 10a–2a, tasa real, incertidumbre de política | Indicadores adelantados de régimen: en episodios de estrés las emisoras defensivas superan a las cíclicas. |
 
-Cada mercado **descarta automáticamente** las familias que no mejoran la predicción (ablación). Por ejemplo, en
-México las tasas de bancos centrales no aportaron y se quitaron.
+Cada mercado **excluye automáticamente** las familias cuya contribución marginal fuera de muestra es nula o
+negativa (análisis de ablación), con el fin de reducir la dimensionalidad y el riesgo de sobreajuste.
 
-### 4. Modelo
+### 4. Especificación
 
-Se usa **regresión cuantil con *gradient boosting*** (LightGBM) y, según el horizonte, un **ensamble** con una
-regresión Ridge (lineal regularizada).
-- **Panel agrupado**: un solo modelo para todas las acciones del mercado, igual que en Gu, Kelly y Xiu (2020).
-  Hay muchas más observaciones que con un modelo por acción y se reduce el sobreajuste.
-- **Árboles de decisión** que capturan interacciones no lineales. Por ejemplo, "el momentum sólo funciona
-  cuando el VIX está bajo".
-- **Cuantiles** p10, p50 y p90: en vez de un solo número se estima la distribución del retorno.
-- Para cada mercado y horizonte se elige el modelo **barato** que mejor resultó en la validación. El LSTM se
-  evaluó y se retiró: costaba unas 10 veces más y no fue mejor.
+- **Panel agrupado** (*pooled panel*): un solo modelo por mercado y horizonte, estimado con todas las emisoras,
+  como en Gu, Kelly y Xiu (2020). Se gana eficiencia estadística respecto a modelos individuales por emisora.
+- **Regresión cuantil** (p10, p50, p90) mediante *gradient boosting* (LightGBM), que captura no linealidades e
+  interacciones (p. ej., momentum condicionado al régimen de volatilidad), y **regresión Ridge** como
+  especificación lineal regularizada. Se evalúan también su **ensamble** (promedio) y dos referencias: caminata
+  aleatoria y momentum simple.
+- La especificación de cada mercado y horizonte se elige mediante **selección anidada** (sección 5).
 
-### 5. Validación (lo que hace confiable al sistema)
+### 5. Validación
 
-- **Walk-forward con purga**: se entrena con el pasado y se prueba con un periodo posterior que el modelo nunca
-  vio, dejando *h* días de separación para que no se filtre información.
-- **Prueba contra el azar (permutación)**: se barajan los pronósticos entre acciones 300 veces. El modelo debe
-  superar a esos "modelos aleatorios" (p < 0.05).
-- **Backtest con costos**: cada *h* días se compra el 20% superior y se vende en corto el 20% inferior,
-  descontando 10 pb por operación y 50 pb anuales de préstamo de títulos.
-- **Selección anidada** (*nested walk-forward*): cuando se elige entre varios modelos, la elección de cada
-  periodo de prueba se hace sólo con los periodos anteriores. Lo que se reporta es el desempeño del
-  *procedimiento de elección*, no del "mejor visto a posteriori".
-- **Corrección por pruebas múltiples**: al probar muchas combinaciones (modelos × plazos), alguna sale bien por
-  suerte (Harvey, Liu y Zhu, 2016). Se calcula el **Deflated Sharpe** (Bailey y López de Prado, 2014), que
-  descuenta el número de intentos, y se exige que la probabilidad de ganancia real sea ≥ 95%.
-- **Filtro de utilidad**: un plazo sólo genera señales si cumple todo lo anterior: ordena mejor que el azar, la
-  estrategia gana (Sharpe ≥ 0.3) de forma significativa y sobrevive a la corrección por pruebas múltiples.
-- **Bandas calibradas** (*conformal prediction*): se ajusta el ancho del rango para que el 80% de los retornos
-  reales caiga dentro.
+- **Walk-forward con purga**: estimación con información pasada y evaluación en un periodo posterior no observado,
+  con una separación de *h* días que impide el traslape entre la variable dependiente de entrenamiento y la de
+  prueba (López de Prado, 2018). Cuatro bloques sobre el 40% final de una muestra 2000–2026.
+- **Prueba de permutación**: los pronósticos se permutan aleatoriamente entre emisoras dentro de cada fecha (300
+  réplicas). Se exige que el coeficiente de información (IC) y el Sharpe de la cartera superen a la distribución
+  bajo la hipótesis nula de ordenamiento aleatorio (p < 0.05).
+- **Cartera simulada con costos**: largo en el quintil superior y corto en el inferior, con carteras traslapadas
+  formadas semanalmente (Jegadeesh y Titman, 1993). Se descuentan los costos de transacción de cada mercado
+  (10 pb; BMV 25 pb) sobre la **rotación neta** (Novy-Marx y Velikov, 2016) y 50 pb anuales por préstamo de
+  valores.
+- **Selección anidada** (*nested walk-forward*): la especificación evaluada en cada bloque se elige sólo con los
+  bloques anteriores; el desempeño reportado corresponde al **procedimiento de selección**, no a la mejor
+  especificación identificada *ex post*.
+- **Corrección por pruebas múltiples**: dado el número de especificaciones evaluadas (modelos × horizontes), se
+  calcula el **Deflated Sharpe Ratio** (Bailey y López de Prado, 2014), en línea con Harvey, Liu y Zhu (2016).
+- **Criterio de activación**: un horizonte emite señales sólo si el IC es significativo (p < 0.05, IC ≥ 0.02) y la
+  cartera long-short obtiene un Sharpe ≥ 0.3 significativamente superior al azar.
+- **Intervalos conformales** (*conformalized quantile regression*; Romano, Patterson y Candès, 2019): se reescala
+  el intervalo p10 – p90 para que su cobertura empírica sea del 80%.
 
-### 6. Limitaciones (léelas)
+### 6. Limitaciones
 
-- **No predice la dirección del mercado.** En la validación ningún modelo superó a "siempre sube" para decir
-  si una acción sube o baja. Lo que sí funciona es el **orden relativo**.
-- **Ventaja pequeña**: un IC de 0.05 – 0.10 es bueno en finanzas, pero significa que el ranking acierta sólo un
-  poco más de la mitad de las veces. La ganancia viene de repetirlo muchas veces y diversificar.
-- **Sesgo de supervivencia**: las listas de acciones son las de hoy. Las empresas que quebraron o salieron del
-  índice no están, lo que puede inflar un poco los resultados históricos. El universo dinámico por liquidez lo
-  reduce, pero no lo elimina: el grupo de candidatas sigue siendo el S&P 500 y el Nasdaq-100 actuales.
-- **Cambio de régimen**: lo que funcionó entre 2018 y 2026 puede dejar de funcionar. Por eso conviene volver a
-  validar cada semana (lo hace la corrida de los lunes).
-- **Universos pequeños** (12 y 26 acciones): pocas acciones por lado, así que los resultados son ruidosos.
-- Uso educativo; **no es recomendación de inversión**.
+- **La dirección del mercado no es predecible con este sistema**: ninguna especificación supera a la regla
+  "siempre sube" en tasa de acierto direccional. El valor se concentra en el **ordenamiento relativo**.
+- **Magnitud del efecto**: un IC de 0.03 – 0.07 es económicamente relevante, pero implica que el ordenamiento
+  acierta sólo marginalmente más que el azar en cada fecha; la rentabilidad proviene de la repetición y la
+  diversificación.
+- **Sesgo de supervivencia**: los universos se definen con listas actuales; las emisoras deslistadas no se
+  incluyen, lo que puede sobrestimar el desempeño histórico. El universo dinámico por liquidez lo atenúa, pero no
+  lo elimina.
+- **Inestabilidad de régimen**: las relaciones estimadas pueden dejar de operar. La validación se repite
+  semanalmente y los pronósticos emitidos se contrastan con los retornos realizados (seguimiento en vivo).
+- **Universos reducidos** (12 y 26 emisoras): pocas posiciones por pata, lo que incrementa la varianza de los
+  resultados.
+- Uso académico y educativo; **no constituye recomendación de inversión**.
 """
 
 CONCEPTS = {
-    "IC (coeficiente de información)": "Correlación (de rangos) entre el retorno pronosticado y el real entre "
-        "las acciones de un mismo día, promediada en el tiempo. 0 = no ordena; 1 = ordena perfecto. En la "
-        "industria, un IC sostenido de 0.03 – 0.10 se considera valioso.",
-    "Sharpe": "Retorno promedio de la estrategia dividido entre su volatilidad, anualizado. Mide la ganancia por "
-        "unidad de riesgo. Mayor que 0.5 es aceptable y mayor que 1 es muy bueno.",
-    "Long-short": "Comprar las acciones con mejor pronóstico y vender en corto las de peor, con el mismo monto. Se "
-        "gana si las compradas le ganan a las vendidas, suba o baje el mercado.",
-    "Venta en corto": "Pedir prestada una acción, venderla hoy y recomprarla después. Se gana si el precio baja (o "
-        "si sube menos que las acciones compradas en la estrategia long-short). Tiene costo de préstamo.",
-    "p-valor": "Probabilidad de obtener un resultado igual de bueno por pura suerte. Menor que 0.05 se considera "
-        "evidencia de que no es suerte.",
-    "Mediana / p10 / p90": "Escenario central / pesimista / optimista. En 8 de cada 10 casos el resultado real "
-        "cae entre p10 y p90.",
-    "Walk-forward": "Validación que simula el uso real: entrenar con el pasado y probar con el futuro inmediato, "
-        "avanzando en el tiempo.",
-    "Punto base (pb)": "0.01%. Una subida de 25 pb en la tasa es +0.25 puntos porcentuales.",
-    "Drawdown": "Caída desde el máximo anterior de la inversión. Mide el peor momento que habría que aguantar.",
-    "Ablación": "Experimento que quita un grupo de variables y reentrena para medir cuánto aportaba.",
-    "Deflated Sharpe": "Probabilidad de que el Sharpe verdadero sea positivo después de descontar cuántas "
-        "configuraciones se probaron. Si pruebas 50 estrategias, la mejor tendrá un Sharpe alto aunque ninguna "
-        "sirva; el Deflated Sharpe corrige eso.",
-    "Selección anidada": "Elegir el modelo sólo con datos anteriores al periodo en que se evalúa, repitiendo el "
-        "proceso en cada periodo. Evita el sesgo de quedarse con 'el que salió mejor'.",
-    "Universo punto en el tiempo": "Lista de acciones que se habría podido elegir en cada fecha con la información "
-        "de ese momento (aquí, las 50 más líquidas de los 6 meses previos), en vez de usar la lista de hoy.",
+    "IC (coeficiente de información)": "Correlación de rangos de Spearman entre el retorno pronosticado y el "
+        "observado entre las emisoras de una misma fecha, promediada en el tiempo. 0 = ordenamiento sin "
+        "información; 1 = ordenamiento perfecto. Un IC sostenido de 0.03 – 0.10 se considera económicamente "
+        "relevante (Grinold y Kahn, 2000).",
+    "Razón de Sharpe": "Retorno medio de la cartera dividido entre su desviación estándar, anualizado. Mide el "
+        "rendimiento por unidad de riesgo total.",
+    "Cartera long-short": "Posición larga en las emisoras con mayor retorno esperado y corta, por el mismo monto, en "
+        "las de menor. Su rendimiento depende del diferencial entre ambas patas y no de la dirección del mercado.",
+    "Venta en corto": "Venta de un valor obtenido en préstamo, con la obligación de recomprarlo posteriormente. "
+        "Genera ganancia si el precio disminuye (o, dentro de una cartera long-short, si aumenta menos que la pata "
+        "larga). Implica un costo de préstamo.",
+    "p-valor": "Probabilidad de observar un resultado al menos tan favorable bajo la hipótesis nula (aquí, "
+        "ordenamiento aleatorio). Valores inferiores a 0.05 se consideran evidencia contra la hipótesis nula.",
+    "Mediana / p10 / p90": "Cuantiles condicionales del retorno: escenario central, inferior y superior. El "
+        "intervalo p10 – p90 tiene una cobertura nominal del 80%.",
+    "Walk-forward": "Esquema de validación que reproduce el uso en tiempo real: estimar con el pasado y evaluar en "
+        "el periodo inmediato siguiente, avanzando secuencialmente en el tiempo.",
+    "Punto base (pb)": "Una centésima de punto porcentual (0.01%). Un alza de 25 pb equivale a +0.25 puntos "
+        "porcentuales.",
+    "Drawdown máximo": "Mayor pérdida acumulada desde un máximo previo de la cartera; aproxima el riesgo de cola "
+        "experimentado por el inversionista.",
+    "Ablación": "Ejercicio que reestima el modelo excluyendo una familia de variables para medir su contribución "
+        "marginal fuera de muestra.",
+    "Deflated Sharpe Ratio": "Probabilidad de que el Sharpe verdadero sea positivo, corrigiendo por el número de "
+        "especificaciones evaluadas y por la no normalidad de los rendimientos (Bailey y López de Prado, 2014). Al "
+        "evaluar muchas estrategias, la mejor exhibe un Sharpe elevado aun cuando ninguna tenga valor; el DSR "
+        "corrige ese sesgo de selección.",
+    "Selección anidada": "Elección de la especificación utilizando únicamente información anterior al periodo de "
+        "evaluación, repetida en cada bloque. Elimina el sesgo de seleccionar *ex post* la especificación ganadora.",
+    "Universo punto en el tiempo": "Conjunto de emisoras elegible en cada fecha con la información disponible en "
+        "ese momento (aquí, las 50 de mayor volumen operado en los seis meses previos), en lugar de la composición "
+        "actual del índice.",
+    "Rotación neta": "Fracción de la cartera que efectivamente se compra o vende en cada rebalanceo, Σ|w(t) − "
+        "w(t−1)|. Los costos de transacción se aplican sólo sobre ella.",
 }

@@ -40,8 +40,9 @@ def run(market_key: str, refresh: bool = False, engines: list[str] | None = None
         m = evaluation.metrics(oos, q)
         bt_df = evaluation.backtest(oos, h, top_k, cost, None, bt_cfg["borrow_bps_annual"], y_step=y_step)
         bt = evaluation.summarize_backtest(bt_df, h)
+        cpp = float(bt_df["costo_ls"].mean()) if "costo_ls" in bt_df else None
         rnd = (evaluation.random_test(oos, h, top_k, cost, cc["permutations"], y_step=y_step,
-                                      borrow_bps_annual=bt_cfg["borrow_bps_annual"])
+                                      borrow_bps_annual=bt_cfg["borrow_bps_annual"], cost_per_period=cpp)
                if eng != "naive" else {})
         if "long_short" in bt_df:
             ls_series[(h, eng)] = bt_df["long_short"]
@@ -58,6 +59,8 @@ def run(market_key: str, refresh: bool = False, engines: list[str] | None = None
             "sharpe_ls_random_p95": rnd.get("sharpe_random_p95"),
             "p_value_sharpe": rnd.get("p_value_sharpe"),
             "sharpe_equal_weight": bt.get("equiponderado", {}).get("sharpe"),
+            # rotación media por periodo (1 = se cambia todo el portafolio) → cuánto pesan los costos
+            "turnover": float(bt_df["rotacion"].mean()) if "rotacion" in bt_df else None,
             **(extra or {}),
         }
         rows.append(row)
@@ -189,7 +192,7 @@ def evaluate(market_key: str, force: bool = False) -> dict:
     if config.market(market_key).requires == "banxico":
         from stockcast.data import banxico
         if not banxico.token():
-            return experiments.record(market_key, "pendiente", "falta BANXICO_TOKEN (token gratuito de Banxico)",
+            return experiments.record(market_key, "pendiente", "requiere BANXICO_TOKEN (token gratuito de Banxico)",
                                       "datos")
     if not force and not experiments.due_for_evaluation(market_key):
         e = experiments.get(market_key)
@@ -199,8 +202,8 @@ def evaluate(market_key: str, force: bool = False) -> dict:
     ok, rows = screen(market_key)
     if not ok:
         best = max(rows, key=lambda r: r["ic"])
-        reason = f"no ordena mejor que el azar en ningún plazo (mejor IC {best['ic']:.3f}, p={best['p_value_ic']:.3f})"
-        return experiments.record(market_key, "pausa" if core else "descartado", reason, "prueba rápida")
+        reason = f"no se rechaza el ordenamiento aleatorio en ningún horizonte (mejor IC {best['ic']:.3f}, p={best['p_value_ic']:.3f})"
+        return experiments.record(market_key, "pausa" if core else "descartado", reason, "prueba preliminar")
     run(market_key)
     before = set(ablation.dropped_groups(market_key))
     ablation.run(market_key)
@@ -213,6 +216,6 @@ def evaluate(market_key: str, force: bool = False) -> dict:
         return experiments.record(market_key, "activo", f"evidencia en {txt}", "evaluación completa",
                                   horizons=sorted(good))
     best = max(d["horizons"].values(), key=lambda v: v["sharpe_long_short"]) if d["horizons"] else None
-    reason = ("ordena mejor que el azar pero la estrategia no gana de forma significativa con costos"
+    reason = ("IC significativo, pero la cartera long-short no es rentable de forma significativa neta de costos"
               + (f" (mejor Sharpe {best['sharpe_long_short']:.2f})" if best else ""))
     return experiments.record(market_key, "pausa" if core else "descartado", reason, "evaluación completa")

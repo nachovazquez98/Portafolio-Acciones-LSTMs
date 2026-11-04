@@ -14,9 +14,9 @@ from stockcast.data.central_banks import BANKS
 TECH = {
     "ret_1": ("Retorno de 1 día", "Cambio porcentual (logarítmico) del precio respecto al cierre anterior."),
     "vol_ratio": ("Volatilidad reciente vs. trimestral",
-                  "Volatilidad de 5 días dividida entre la de 63 días. > 1: la acción está más agitada de lo normal."),
+                  "Volatilidad de 5 días dividida entre la de 63 días. > 1: volatilidad reciente superior a la habitual."),
     "bb_pos": ("Posición en Bandas de Bollinger",
-               "Dónde está el precio dentro de las bandas de 20 días: -1 = banda inferior, 0 = media, +1 = superior."),
+               "Posición del precio dentro de las bandas de 20 días: -1 = banda inferior, 0 = media, +1 = superior."),
     "sma50_ratio": ("Distancia a la media de 50 días",
                     "Precio / media móvil de 50 días − 1. Positivo: cotiza por encima de su tendencia de ~2 meses."),
     "sma200_ratio": ("Distancia a la media de 200 días",
@@ -24,7 +24,7 @@ TECH = {
     "rsi_14": ("RSI 14 días", "Índice de fuerza relativa (0–100). > 70 sobrecompra, < 30 sobreventa."),
     "macd_hist": ("Histograma MACD", "MACD (EMA 12 − EMA 26) menos su señal de 9 días, dividido entre el precio. "
                                      "Mide si el impulso de corto plazo se acelera o se frena."),
-    "stoch_k": ("Estocástico %K", "Dónde cerró el precio dentro del rango máximo-mínimo de 14 días (0–100)."),
+    "stoch_k": ("Estocástico %K", "Posición del cierre dentro del rango máximo-mínimo de 14 días (0–100)."),
     "atr_pct": ("Rango verdadero promedio (%)", "ATR de 14 días dividido entre el precio: tamaño típico del movimiento diario."),
     "dist_52w_high": ("Distancia al máximo de 52 semanas", "Precio / máximo del último año − 1. 0 = en máximos."),
     "volume_z": ("Volumen anormal", "Volumen de hoy en desviaciones estándar respecto a su promedio de 20 días."),
@@ -68,7 +68,7 @@ def describe(col: str) -> dict:
     elif m := re.fullmatch(r"rel_ret_(\d+)", col):
         name = f"Momentum relativo {m[1]} días"
         desc = (f"Retorno de {m[1]} días de la acción menos el promedio de todas las acciones del mercado ese día. "
-                "Positivo: le va mejor que al resto.")
+                "Positivo: desempeño superior al promedio del universo.")
     elif m := re.fullmatch(r"m_([A-Z0-9]+?)(_ret5|_ret21|_chg21)?", col):
         base = MACRO_NAMES.get(m[1], m[1])
         suffix = m[2] or ""
@@ -99,7 +99,7 @@ def describe(col: str) -> dict:
         name = base + (": cambio 30 d" if m[2] else "")
         desc = ("Diferencia entre tasas largas y cortas: anticipa la prima por plazo (Fama y Bliss, 1987)."
                 if m[1] == "slope_10y3m" else
-                "Qué tan 'jorobada' está la curva; resume expectativas de política a mediano plazo "
+                "Grado de curvatura de la estructura de plazos; resume expectativas de política a mediano plazo "
                 "(Litterman y Scheinkman, 1991).") + (" Cambio en 30 días." if m[2] else "")
     elif m := re.fullmatch(r"f_([A-Z0-9]+?)(_chg30)?", col):
         cfgd = config.load()

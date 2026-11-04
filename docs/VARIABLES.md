@@ -9,10 +9,20 @@ Variables que puede usar el modelo (cada mercado descarta los grupos sin aporte;
 | `f_BAA10Y` | Spread corporativo Baa − Tesoro 10 años (estrés crediticio): nivel | Valor actual de «Spread corporativo Baa − Tesoro 10 años (estrés crediticio)» (FRED, serie BAA10Y). Más alto = más estrés crediticio (inversionistas exigen más premio por riesgo) |
 | `f_BAA10Y_chg30` | Spread corporativo Baa − Tesoro 10 años (estrés crediticio): cambio 30 d | Cambio en 30 días de «Spread corporativo Baa − Tesoro 10 años (estrés crediticio)» (FRED, serie BAA10Y). |
 | `f_DFII10_chg30` | Tasa real 10 años (TIPS): cambio 30 d | Cambio en 30 días de «Tasa real 10 años (TIPS)» (FRED, serie DFII10). |
+| `f_DGS10_chg30` | Tasa del Tesoro a 10 años: cambio 30 d | Cambio en 30 días de «Tasa del Tesoro a 10 años» (FRED, serie DGS10). |
+| `f_DGS1_chg30` | Tasa del Tesoro a 1 año: cambio 30 d | Cambio en 30 días de «Tasa del Tesoro a 1 año» (FRED, serie DGS1). |
 | `f_DGS2_chg30` | Tasa del Tesoro a 2 años: cambio 30 d | Cambio en 30 días de «Tasa del Tesoro a 2 años» (FRED, serie DGS2). |
+| `f_DGS30_chg30` | Tasa del Tesoro a 30 años: cambio 30 d | Cambio en 30 días de «Tasa del Tesoro a 30 años» (FRED, serie DGS30). |
+| `f_DGS3MO_chg30` | Tasa del Tesoro a 3 meses: cambio 30 d | Cambio en 30 días de «Tasa del Tesoro a 3 meses» (FRED, serie DGS3MO). |
+| `f_DGS5_chg30` | Tasa del Tesoro a 5 años: cambio 30 d | Cambio en 30 días de «Tasa del Tesoro a 5 años» (FRED, serie DGS5). |
 | `f_T10Y2Y_chg30` | Pendiente curva Tesoro 10a-2a: cambio 30 d | Cambio en 30 días de «Pendiente curva Tesoro 10a-2a» (FRED, serie T10Y2Y). |
+| `f_T10YIE_chg30` | Inflación implícita a 10 años (breakeven): cambio 30 d | Cambio en 30 días de «Inflación implícita a 10 años (breakeven)» (FRED, serie T10YIE). |
 | `f_USEPUINDXD` | Índice de incertidumbre de política económica (EE. UU.): nivel | Valor actual de «Índice de incertidumbre de política económica (EE. UU.)» (FRED, serie USEPUINDXD). Promedio de 30 días; más alto = más incertidumbre de política económica |
 | `f_USEPUINDXD_chg30` | Índice de incertidumbre de política económica (EE. UU.): cambio 30 d | Cambio en 30 días de «Índice de incertidumbre de política económica (EE. UU.)» (FRED, serie USEPUINDXD). |
+| `f_curvature` | Curvatura de la curva (2×5a − 1a − 30a) | Qué tan 'jorobada' está la curva; resume expectativas de política a mediano plazo (Litterman y Scheinkman, 1991). |
+| `f_curvature_chg30` | Curvatura de la curva (2×5a − 1a − 30a): cambio 30 d | Qué tan 'jorobada' está la curva; resume expectativas de política a mediano plazo (Litterman y Scheinkman, 1991). Cambio en 30 días. |
+| `f_slope_10y3m` | Pendiente de la curva (10 años − 3 meses) | Diferencia entre tasas largas y cortas: anticipa la prima por plazo (Fama y Bliss, 1987). |
+| `f_slope_10y3m_chg30` | Pendiente de la curva (10 años − 3 meses): cambio 30 d | Diferencia entre tasas largas y cortas: anticipa la prima por plazo (Fama y Bliss, 1987). Cambio en 30 días. |
 
 ## Mercado y macro
 
@@ -34,12 +44,18 @@ Variables que puede usar el modelo (cada mercado descarta los grupos sin aporte;
 | `m_GDAXI_ret5` | DAX (Alemania): retorno 1 semana | Retorno logarítmico de DAX (Alemania) en los últimos 7 días naturales. |
 | `m_GSPC_ret21` | S&P 500: retorno 1 mes | Retorno logarítmico de S&P 500 en los últimos 30 días naturales. |
 | `m_GSPC_ret5` | S&P 500: retorno 1 semana | Retorno logarítmico de S&P 500 en los últimos 7 días naturales. |
+| `m_IEF_ret21` | IEF: retorno 1 mes | Retorno logarítmico de IEF en los últimos 30 días naturales. |
+| `m_IEF_ret5` | IEF: retorno 1 semana | Retorno logarítmico de IEF en los últimos 7 días naturales. |
+| `m_MOVE_ret21` | MOVE (volatilidad esperada de bonos del Tesoro): retorno 1 mes | Retorno logarítmico de MOVE (volatilidad esperada de bonos del Tesoro) en los últimos 30 días naturales. |
+| `m_MOVE_ret5` | MOVE (volatilidad esperada de bonos del Tesoro): retorno 1 semana | Retorno logarítmico de MOVE (volatilidad esperada de bonos del Tesoro) en los últimos 7 días naturales. |
 | `m_MXNX_ret21` | Tipo de cambio USD/MXN: retorno 1 mes | Retorno logarítmico de Tipo de cambio USD/MXN en los últimos 30 días naturales. |
 | `m_MXNX_ret5` | Tipo de cambio USD/MXN: retorno 1 semana | Retorno logarítmico de Tipo de cambio USD/MXN en los últimos 7 días naturales. |
 | `m_MXX_ret21` | IPC (Bolsa Mexicana): retorno 1 mes | Retorno logarítmico de IPC (Bolsa Mexicana) en los últimos 30 días naturales. |
 | `m_MXX_ret5` | IPC (Bolsa Mexicana): retorno 1 semana | Retorno logarítmico de IPC (Bolsa Mexicana) en los últimos 7 días naturales. |
 | `m_STOXX50E_ret21` | Euro Stoxx 50: retorno 1 mes | Retorno logarítmico de Euro Stoxx 50 en los últimos 30 días naturales. |
 | `m_STOXX50E_ret5` | Euro Stoxx 50: retorno 1 semana | Retorno logarítmico de Euro Stoxx 50 en los últimos 7 días naturales. |
+| `m_TIP_ret21` | Bonos ligados a inflación (ETF TIP): retorno 1 mes | Retorno logarítmico de Bonos ligados a inflación (ETF TIP) en los últimos 30 días naturales. |
+| `m_TIP_ret5` | Bonos ligados a inflación (ETF TIP): retorno 1 semana | Retorno logarítmico de Bonos ligados a inflación (ETF TIP) en los últimos 7 días naturales. |
 | `m_TNX` | Tasa del Tesoro de EE. UU. a 10 años: nivel | Valor actual de Tasa del Tesoro de EE. UU. a 10 años. |
 | `m_TNX_chg21` | Tasa del Tesoro de EE. UU. a 10 años: cambio 1 mes | Cambio en puntos de Tasa del Tesoro de EE. UU. a 10 años en los últimos 30 días naturales. |
 | `m_VIX` | VIX (volatilidad esperada del S&P 500): nivel | Valor actual de VIX (volatilidad esperada del S&P 500). |

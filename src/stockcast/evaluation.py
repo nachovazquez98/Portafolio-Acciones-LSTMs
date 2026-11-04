@@ -100,6 +100,15 @@ def conformal_scale(pred: pd.DataFrame, quantiles: list[float]) -> float:
     return 4.0
 
 
+def _turnover(prev: pd.Series, new: pd.Series) -> float:
+    """Rotación del periodo = Σ|w_t − w_{t−1}| (compras + ventas), con los pesos del portafolio agregado.
+
+    Sólo se paga por lo que realmente cambia: si una acción sigue en el portafolio no se vende y se vuelve a
+    comprar (Novy-Marx & Velikov 2016, "A Taxonomy of Anomalies and Their Trading Costs"). Se ignora la deriva
+    de los pesos por los precios (aproximación estándar)."""
+    return float(prev.sub(new, fill_value=0).abs().sum())
+
+
 def backtest(pred: pd.DataFrame, horizon: int, top_k: int, cost_bps: float,
              benchmark: pd.Series | None = None, borrow_bps_annual: float = 50.0,
              y_step: pd.Series | None = None, step: int = 5) -> pd.DataFrame:
@@ -120,6 +129,8 @@ def backtest(pred: pd.DataFrame, horizon: int, top_k: int, cost_bps: float,
     counts = pred.groupby(level="date").size()
     dates = list(counts[counts >= 2 * top_k].index)[::horizon]
     borrow = borrow_bps_annual / 1e4 * horizon / 252
+    c = cost_bps / 1e4
+    w_l = w_s = pd.Series(dtype=float)
     rows = []
     for d in dates:
         g = pred.xs(d, level="date")
@@ -129,9 +140,13 @@ def backtest(pred: pd.DataFrame, horizon: int, top_k: int, cost_bps: float,
         longs, shorts = ranked.tail(top_k), ranked.head(top_k)
         r_long = np.expm1(longs["y"]).mean()
         r_short = np.expm1(shorts["y"]).mean()
+        nl, ns = pd.Series(1 / top_k, index=longs.index), pd.Series(1 / top_k, index=shorts.index)
+        t_l, t_s = _turnover(w_l, nl), _turnover(w_s, ns)
+        w_l, w_s = nl, ns
         rows.append({"date": d,
-                     "estrategia": r_long - 2 * cost_bps / 1e4,
-                     "long_short": 0.5 * (r_long - r_short) - 2 * cost_bps / 1e4 - 0.5 * borrow,
+                     "estrategia": r_long - t_l * c,
+                     "long_short": 0.5 * (r_long - r_short) - 0.5 * (t_l + t_s) * c - 0.5 * borrow,
+                     "rotacion": 0.5 * (t_l + t_s), "costo_ls": 0.5 * (t_l + t_s) * c,
                      "equiponderado": np.expm1(g["y"]).mean(),
                      "picks": ", ".join(longs.index[::-1]), "shorts": ", ".join(shorts.index)})
     bt = pd.DataFrame(rows).set_index("date") if rows else pd.DataFrame()
@@ -168,19 +183,29 @@ def backtest_overlapping(pred: pd.DataFrame, horizon: int, top_k: int, cost_bps:
     ys_dates = set(ys.index.get_level_values("date"))
     live: deque = deque(maxlen=n)
     borrow = borrow_bps_annual / 1e4 * step / 252
+    c = cost_bps / 1e4
+    w_l = w_s = pd.Series(dtype=float)
+
+    def weights(legs):  # peso agregado de los portafolios vivos (cada uno 1/n del capital)
+        return pd.Series(np.concatenate(legs), dtype=object).value_counts().astype(float) / (len(legs) * top_k)
+
     rows = []
     for d in dates:
         g = pred.xs(d, level="date")
         ranked = g.sort_values(med)
         live.append((list(ranked.index[-top_k:]), list(ranked.index[:top_k])))
+        # se rebalancea en cada fecha de formación, haya o no retorno medible ese día
+        nl, ns = weights([L for L, _ in live]), weights([S for _, S in live])
+        t_l, t_s = _turnover(w_l, nl), _turnover(w_s, ns)
+        w_l, w_s = nl, ns
         if d not in ys_dates:
             continue
         yd = np.expm1(ys.xs(d, level="date"))
         r_l = np.nanmean([yd.reindex(L).mean() for L, _ in live])
         r_s = np.nanmean([yd.reindex(S).mean() for _, S in live])
-        turn = 2 * cost_bps / 1e4 / n
-        rows.append({"date": d, "estrategia": r_l - turn,
-                     "long_short": 0.5 * (r_l - r_s) - turn - 0.5 * borrow,
+        rows.append({"date": d, "estrategia": r_l - t_l * c,
+                     "long_short": 0.5 * (r_l - r_s) - 0.5 * (t_l + t_s) * c - 0.5 * borrow,
+                     "rotacion": 0.5 * (t_l + t_s), "costo_ls": 0.5 * (t_l + t_s) * c,
                      "equiponderado": yd.reindex(g.index).mean(),
                      "picks": ", ".join(live[-1][0][::-1]), "shorts": ", ".join(live[-1][1])})
     bt = pd.DataFrame(rows).set_index("date") if rows else pd.DataFrame()
@@ -220,7 +245,7 @@ def _zrank(v: np.ndarray) -> np.ndarray:
 
 def random_test(pred: pd.DataFrame, horizon: int, top_k: int, cost_bps: float,
                 n_perm: int = 300, seed: int = 0, y_step: pd.Series | None = None, step: int = 5,
-                borrow_bps_annual: float = 50.0) -> dict:
+                borrow_bps_annual: float = 50.0, cost_per_period: float | None = None) -> dict:
     """¿El modelo es mejor que el azar?
 
     Prueba de permutación: dentro de cada fecha se barajan las predicciones entre acciones (un "modelo
@@ -244,7 +269,10 @@ def random_test(pred: pd.DataFrame, horizon: int, top_k: int, cost_bps: float,
     rebal_ids = set(range(0, len(groups), every))
     n_live = max(horizon // step, 1) if overlapping else 1
     # mismos costos que el backtest: rotación + préstamo de títulos de la pata corta
-    cost = 2 * cost_bps / 1e4 / n_live + 0.5 * borrow_bps_annual / 1e4 * every / 252
+    # `cost_per_period`: costo de rotación medido del modelo real (backtest con rotación neta); se aplica igual a
+    # todas las permutaciones, así la prueba compara sólo la habilidad de selección. Sin él: rotación completa.
+    trade = cost_per_period if cost_per_period is not None else 2 * cost_bps / 1e4 / n_live
+    cost = trade + 0.5 * borrow_bps_annual / 1e4 * every / 252
     ppy = 252 / step if overlapping else 252 / horizon
     P = n_perm + 1
 
