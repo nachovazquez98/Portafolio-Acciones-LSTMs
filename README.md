@@ -58,6 +58,13 @@ Sin `make`: `uv venv --python 3.12 .venv && uv pip install -e ".[dev]"` (o `pyth
 | Componentes de índices (universo global) | Wikipedia |
 | Estados financieros (moat) | Yahoo Finance |
 
+## CETES (Banxico)
+
+1. Pide tu token gratuito en https://www.banxico.org.mx/SieAPIRest/service/v1/token
+2. Guárdalo fuera del repo: `echo "BANXICO_TOKEN=tu_token" > ~/.config/stockcast.env && chmod 600 ~/.config/stockcast.env`
+3. Para la terminal: `export BANXICO_TOKEN=tu_token`. El timer de systemd lo lee de ese archivo.
+4. `stockcast evaluate --market cetes`: pasa por la misma evaluación por etapas que todo lo demás.
+
 ## Cómo funciona
 
 ```
@@ -106,6 +113,8 @@ Tabla completa en [`docs/RESULTS.md`](docs/RESULTS.md). Evaluación rigurosa:
 | EE. UU. dinámico (top 50 líquidas) | 1 mes | 0.035 | 0.07 | 25% | 🗑️ descartado |
 | Japón | 1 mes | 0.013 | 0.20 | 18% | 🗑️ descartado |
 | Alemania | – | < 0 | < 0 | ≈ 0% | 🗑️ descartado (también en la prueba rápida) |
+| Bonos del Tesoro de EE. UU. (curva) | – | < 0 | – | – | 🗑️ descartado en la prueba rápida |
+| CETES 28/91/182/364 días | – | – | – | – | 🕒 pendiente: requiere `BANXICO_TOKEN` |
 
 Qué significa:
 - **Ordenar acciones mejor que el azar es común** (IC significativo en casi todos los mercados). **Ganar dinero con eso, después de costos y de corregir por pruebas múltiples, es raro**: solo EE. UU. y Reino Unido a 1 mes, y con evidencia moderada.

@@ -91,8 +91,21 @@ def central_bank_features(rates: pd.DataFrame, breadth_days: int = 90) -> pd.Dat
 
 
 def fred_features(fred: pd.DataFrame) -> pd.DataFrame:
-    """Niveles suavizados y cambios de 30 días de las series de estrés/incertidumbre de FRED."""
+    """Niveles suavizados y cambios de 30 días de las series de estrés/incertidumbre de FRED.
+
+    Si están las tasas del Tesoro por plazo (mercado de bonos), agrega la estructura de tasas:
+    pendiente 10a−3m (Fama & Bliss 1987; Campbell & Shiller 1991) y curvatura 2·5a−1a−30a
+    (Litterman & Scheinkman 1991), en nivel y cambio de 30 días.
+    """
     out = pd.DataFrame(index=fred.index)
+    if {"DGS10", "DGS3MO"} <= set(fred.columns):
+        slope = fred["DGS10"] - fred["DGS3MO"]
+        out["f_slope_10y3m"] = slope
+        out["f_slope_10y3m_chg30"] = slope - slope.shift(30)
+    if {"DGS1", "DGS5", "DGS30"} <= set(fred.columns):
+        curv = 2 * fred["DGS5"] - fred["DGS1"] - fred["DGS30"]
+        out["f_curvature"] = curv
+        out["f_curvature_chg30"] = curv - curv.shift(30)
     for c in fred.columns:
         s = fred[c].rolling(30, min_periods=1).mean() if c == "USEPUINDXD" else fred[c]
         if c in ("USEPUINDXD", "BAA10Y"):  # niveles de estrés con rango estable (tasas: sólo cambios)

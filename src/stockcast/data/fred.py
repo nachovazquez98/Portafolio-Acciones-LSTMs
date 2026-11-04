@@ -19,10 +19,11 @@ log = logging.getLogger(__name__)
 URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={sid}&cosd={start}"
 
 
-def load_fred(series: dict[str, str] | None = None, refresh: bool = True, start: str = "1990-01-01") -> pd.DataFrame:
+def load_fred(series: dict[str, str] | None = None, refresh: bool = True, start: str = "1990-01-01",
+              cache_name: str = "fred") -> pd.DataFrame:
     """Matriz diaria fecha x serie (forward-filled). `series` = {id_fred: descripción}."""
     series = series if series is not None else config.load().get("fred", {})
-    cache = config.path("data") / "fred.parquet"
+    cache = config.path("data") / f"{cache_name}.parquet"
     cached = pd.read_parquet(cache) if cache.exists() else pd.DataFrame()
     if refresh and series:
         cols = {}
@@ -41,5 +42,6 @@ def load_fred(series: dict[str, str] | None = None, refresh: bool = True, start:
             cached.to_parquet(cache)
     if cached.empty:
         return cached
+    cached = cached[[c for c in series if c in cached.columns]] if series else cached
     idx = pd.date_range(cached.index.min(), pd.Timestamp.today().normalize(), freq="D")
     return cached.reindex(idx).ffill().rename_axis("date")

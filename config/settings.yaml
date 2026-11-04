@@ -85,6 +85,41 @@ markets:
               XLY: Consumo discrecional, XLP: Consumo básico, XLU: Servicios públicos, XLB: Materiales,
               XLRE: Inmobiliario, XLC: Comunicaciones}
 
+  bonos_us:
+    name: "Bonos del Tesoro de EE. UU. (curva)"
+    currency: USD
+    benchmark: "IEF"
+    # Candidato: ¿en qué plazo de la curva conviene estar? Seis ETFs de bonos del Tesoro de < 1 año a 20+
+    # años. Variables propias: curva completa del Tesoro (FRED), inflación implícita y volatilidad de tasas
+    # (MOVE). Literatura: Cochrane & Piazzesi 2005; Ludvigson & Ng 2009; Moskowitz, Ooi & Pedersen 2012.
+    tickers: [SHV, SHY, IEI, IEF, TLH, TLT]
+    macro: ["^MOVE", "^VIX", "^GSPC", "DX-Y.NYB", "CL=F", "GC=F", "TIP"]
+    fred_extra: [DGS3MO, DGS1, DGS5, DGS10, DGS30, T10YIE]
+    news_lang: {hl: en-US, gl: US, ceid: "US:en"}
+    top_k: 1
+    cost_bps: 1          # ETFs del Tesoro: diferencial ~1 pb
+    news: false
+    sectors: {SHV: "Muy corto (< 1 año)", SHY: "Corto (1–3 años)", IEI: "Medio (3–7 años)",
+              IEF: "Medio-largo (7–10 años)", TLH: "Largo (10–20 años)", TLT: "Muy largo (20+ años)"}
+
+  cetes:
+    name: "CETES (¿a qué plazo invertir?)"
+    currency: MXN
+    benchmark: "^MXX"
+    # Candidato: CETES a 28, 91, 182 y 364 días (Banxico, requiere BANXICO_TOKEN). Pregunta: ¿qué plazo
+    # rinde más en el próximo mes? Depende de si Banxico va a recortar o subir tasas (hipótesis de
+    # expectativas + prima por plazo; Fama & Bliss 1987, Campbell & Shiller 1991). Sólo compras.
+    requires: banxico
+    long_only: true
+    tickers: [CETES28, CETES91, CETES182, CETES364]
+    macro: ["MXN=X", "^MXX", "^GSPC", "^TNX", "DX-Y.NYB", "CL=F"]
+    fred_extra: [DGS3MO, DGS1, DGS10]
+    news_lang: {hl: es-419, gl: MX, ceid: "MX:es-419"}
+    top_k: 1
+    cost_bps: 0          # cetesdirecto no cobra comisión
+    news: false
+    sectors: {CETES28: "28 días", CETES91: "91 días", CETES182: "182 días", CETES364: "364 días"}
+
   # --- Mercados candidatos: sólo se activan si la validación demuestra que la predicción sirve ---
   # 30 acciones más líquidas con historia desde 2019. Variables propias: índice local, divisa y la
   # tasa de su banco central (BIS: XM = BCE, JP = Banco de Japón, GB = Banco de Inglaterra).
@@ -133,6 +168,15 @@ fred:
   DFII10: "Tasa real 10 años (TIPS)"
   # Tasa a 2 años: resume la trayectoria esperada de la política monetaria (Gürkaynak, Sack & Swanson 2005).
   DGS2: "Tasa del Tesoro a 2 años"
+
+fred_labels:
+  # nombres de series FRED que sólo usan algunos mercados (fred_extra)
+  DGS3MO: "Tasa del Tesoro a 3 meses"
+  DGS1: "Tasa del Tesoro a 1 año"
+  DGS5: "Tasa del Tesoro a 5 años"
+  DGS10: "Tasa del Tesoro a 10 años"
+  DGS30: "Tasa del Tesoro a 30 años"
+  T10YIE: "Inflación implícita a 10 años (breakeven)"
 
 model:
   engine: lightgbm      # naive | momentum | ridge | lightgbm | ensemble

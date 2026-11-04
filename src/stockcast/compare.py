@@ -186,6 +186,11 @@ def evaluate(market_key: str, force: bool = False) -> dict:
     from stockcast import ablation, experiments, gate
 
     core = market_key in config.load()["gate"]["core_markets"]
+    if config.market(market_key).requires == "banxico":
+        from stockcast.data import banxico
+        if not banxico.token():
+            return experiments.record(market_key, "pendiente", "falta BANXICO_TOKEN (token gratuito de Banxico)",
+                                      "datos")
     if not force and not experiments.due_for_evaluation(market_key):
         e = experiments.get(market_key)
         log.info("[%s] descartado el %s (%s): se re-prueba hasta cumplir el plazo", market_key,

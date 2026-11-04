@@ -39,7 +39,8 @@ MACRO_NAMES = {
     "BVSP": "Bovespa (Brasil)", "EWW": "ETF de México (EWW)", "GDAXI": "DAX (Alemania)", "STOXX50E": "Euro Stoxx 50",
     "EURUSDX": "Tipo de cambio EUR/USD", "N225": "Nikkei 225 (Japón)", "JPYX": "Tipo de cambio USD/JPY",
     "HSI": "Hang Seng (Hong Kong)", "FTSE": "FTSE 100 (Reino Unido)", "GBPUSDX": "Tipo de cambio GBP/USD",
-    "URTH": "MSCI World (ETF)", "NDX": "Nasdaq-100", "EEM": "Mercados emergentes (ETF EEM)",
+    "URTH": "MSCI World (ETF)", "NDX": "Nasdaq-100", "MOVE": "MOVE (volatilidad esperada de bonos del Tesoro)",
+    "TIP": "Bonos ligados a inflación (ETF TIP)", "EEM": "Mercados emergentes (ETF EEM)",
 }
 
 FRED_LEVEL_NOTE = {
@@ -92,8 +93,17 @@ def describe(col: str) -> dict:
         bank = BANKS.get(m[1], m[1])
         name = f"Diferencial de tasas: {bank} − Fed"
         desc = f"Tasa de {bank} menos la de la Fed (puntos porcentuales). Afecta tipo de cambio y flujos de capital."
+    elif m := re.fullmatch(r"f_(slope_10y3m|curvature)(_chg30)?", col):
+        base = ("Pendiente de la curva (10 años − 3 meses)" if m[1] == "slope_10y3m"
+                else "Curvatura de la curva (2×5a − 1a − 30a)")
+        name = base + (": cambio 30 d" if m[2] else "")
+        desc = ("Diferencia entre tasas largas y cortas: anticipa la prima por plazo (Fama y Bliss, 1987)."
+                if m[1] == "slope_10y3m" else
+                "Qué tan 'jorobada' está la curva; resume expectativas de política a mediano plazo "
+                "(Litterman y Scheinkman, 1991).") + (" Cambio en 30 días." if m[2] else "")
     elif m := re.fullmatch(r"f_([A-Z0-9]+?)(_chg30)?", col):
-        label = config.load().get("fred", {}).get(m[1], m[1])
+        cfgd = config.load()
+        label = cfgd.get("fred", {}).get(m[1]) or cfgd.get("fred_labels", {}).get(m[1], m[1])
         if m[2]:
             name, desc = f"{label}: cambio 30 d", f"Cambio en 30 días de «{label}» (FRED, serie {m[1]})."
         else:

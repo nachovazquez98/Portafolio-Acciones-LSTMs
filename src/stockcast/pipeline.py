@@ -53,7 +53,13 @@ def load_inputs(market_key: str, refresh: bool = True, with_news: bool = True,
                 drop_irrelevant: bool = True) -> dict:
     cfg = config.load()
     m = config.market(market_key)
-    prices = market.load_prices(sorted(set(m.tickers + m.macro + [m.benchmark])), refresh=refresh)
+    if m.requires == "banxico":
+        # activos sintéticos (CETES por plazo) desde Banxico + variables de mercado desde Yahoo
+        from stockcast.data import banxico
+        prices = pd.concat([banxico.cetes_prices(refresh=refresh),
+                            market.load_prices(sorted(set(m.macro)), refresh=refresh)], ignore_index=True)
+    else:
+        prices = market.load_prices(sorted(set(m.tickers + m.macro + [m.benchmark])), refresh=refresh)
     stocks = prices[prices["ticker"].isin(m.tickers)]
     pit_members = None
     if m.pit_top_n or m.pit_min_dollar_volume > 0:
@@ -73,7 +79,8 @@ def load_inputs(market_key: str, refresh: bool = True, with_news: bool = True,
         log.warning("Sin tasas de bancos centrales: %s", e)
         cb = None
     try:
-        fr = fred.load_fred(refresh=refresh)
+        series = {**cfg.get("fred", {}), **{sid: cfg.get("fred_labels", {}).get(sid, sid) for sid in m.fred_extra}}
+        fr = fred.load_fred(series=series, refresh=refresh, cache_name="fred" if not m.fred_extra else f"fred_{market_key}")
     except Exception as e:
         log.warning("Sin series FRED: %s", e)
         fr = None
@@ -215,7 +222,7 @@ def run(market_key: str, refresh: bool = True, engine: str | None = None,
                 rec[f"price_q{q}"] = float(close * np.exp(row[f"q{q}"]))
             forecasts.append(rec)
 
-    fc = signals.add_signals(pd.DataFrame(forecasts), quantiles).assign(run_at=datetime.now())
+    fc = signals.add_signals(pd.DataFrame(forecasts), quantiles, long_only=m.long_only).assign(run_at=datetime.now())
     fc.to_parquet(out_dir / "forecasts.parquet", index=False)
     hist_path = out_dir / "forecast_history.parquet"
     hist = pd.concat([pd.read_parquet(hist_path), fc]) if hist_path.exists() else fc

@@ -220,7 +220,8 @@ with tabs[0]:
     left, right = st.columns(2)
     for col, title, df, color in (
             (left, "🟢 Mejores perspectivas" + (" · COMPRA" if is_valid else ""), cur.head(n_show), GREEN),
-            (right, "🔴 Peores perspectivas" + (" · VENTA EN CORTO" if is_valid else ""), cur.tail(n_show)[::-1], RED)):
+            (right, ("⚪ Menos atractivos" if M.long_only else "🔴 Peores perspectivas")
+             + (" · VENTA EN CORTO" if is_valid and not M.long_only else ""), cur.tail(n_show)[::-1], RED)):
         with col.container(border=True):
             st.markdown(f"#### {title}")
             for t, r in df.iterrows():

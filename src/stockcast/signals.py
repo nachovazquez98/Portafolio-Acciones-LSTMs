@@ -37,12 +37,15 @@ def prob_up_vec(qvals: np.ndarray, quantiles: list[float]) -> np.ndarray:
     return 1 - np.nan_to_num(cdf0, nan=0.5)
 
 
-def add_signals(fc: pd.DataFrame, quantiles: list[float], quantile_cut: float = 0.2) -> pd.DataFrame:
+def add_signals(fc: pd.DataFrame, quantiles: list[float], quantile_cut: float = 0.2,
+                long_only: bool = False) -> pd.DataFrame:
     fc = fc.copy()
     fc["prob_up"] = prob_up_vec(fc[[f"ret_q{q}" for q in quantiles]].to_numpy(), quantiles)
     pct = fc.groupby("horizon")["ret_q0.5"].rank(pct=True)
     fc["rank_pct"] = pct
     fc["signal"] = np.select([pct > 1 - quantile_cut, pct <= quantile_cut], ["COMPRA", "VENTA EN CORTO"], "NEUTRAL")
+    if long_only:  # p. ej. CETES: sólo se recomienda en qué invertir, no qué vender en corto
+        fc.loc[fc["signal"] == "VENTA EN CORTO", "signal"] = "NEUTRAL"
     if "evidence" in fc:  # plazo sin ventaja demostrada fuera de muestra -> no se recomienda operar
         fc.loc[fc["evidence"] == "ninguna", "signal"] = "SIN SEÑAL"
     elif "validated" in fc:

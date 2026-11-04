@@ -47,6 +47,21 @@ Advertencia: más historia con listas de acciones de hoy **aumenta** el sesgo de
 Goetzmann, Ibbotson y Ross, 1992). Por eso el mercado de ETFs sectoriales, que no lo tiene, es una prueba
 de control importante.
 
+## 1d. Bonos: curva de EE. UU. y CETES
+
+| Paper | Hallazgo | Qué se hizo |
+|---|---|---|
+| Cochrane y Piazzesi (2005), *Bond Risk Premia*, AER | Una combinación de tasas forward predice el exceso de retorno de bonos. | Variables de la curva completa del Tesoro (FRED: 3m, 1a, 5a, 10a, 30a). |
+| Fama y Bliss (1987); Campbell y Shiller (1991) | La pendiente de la curva anticipa la prima por plazo. | `f_slope_10y3m` (10 años − 3 meses). |
+| Litterman y Scheinkman (1991) | Nivel, pendiente y curvatura explican casi todo el movimiento de la curva. | `f_curvature` (2·5a − 1a − 30a). |
+| Ludvigson y Ng (2009), *Macro Factors in Bond Risk Premia* | Factores macro (inflación, actividad) predicen bonos. | Inflación implícita a 10 años (T10YIE), MOVE, VIX y dólar. |
+| Moskowitz, Ooi y Pedersen (2012), *Time Series Momentum* | Tendencia en bonos a 1–12 meses. | Momentum de cada ETF (variables técnicas existentes). |
+| Duffee (2002); Diebold y Li (2006) | La dirección de las tasas es muy difícil de predecir fuera de muestra. | **Resultado propio:** la curva de EE. UU. se **descartó en la prueba rápida** (IC negativo: el modelo aprendió el régimen de tasas a la baja de 2003–2020 y falló con el cambio de 2022). |
+
+CETES (28, 91, 182 y 364 días): datos de la API SIE de Banxico (requiere token gratuito). El rendimiento de
+mantener cada plazo se aproxima con devengo + duración de un cupón cero. Mercado "solo compras": recomienda
+el plazo, no ventas en corto. Queda **pendiente** hasta configurar `BANXICO_TOKEN`.
+
 ## 2. Bancos centrales y política monetaria
 
 | Paper | Hallazgo | Qué se hizo |

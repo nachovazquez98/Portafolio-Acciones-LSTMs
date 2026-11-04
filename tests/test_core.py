@@ -235,3 +235,23 @@ def test_experiment_registry_skips_recent_discards(tmp_path, monkeypatch):
     assert experiments.due_for_evaluation("de")                       # pasó el plazo → se re-prueba
     experiments.record("mx", "pausa", "sin ganancia", "evaluación completa")
     assert experiments.due_for_evaluation("mx")                       # en pausa se sigue evaluando
+
+
+def test_cetes_holding_index():
+    from stockcast.data.banxico import holding_index
+    idx = pd.bdate_range("2024-01-01", periods=300)
+    flat = holding_index(pd.Series(10.0, index=idx), 364)
+    years = (idx[-1] - idx[0]).days / 360
+    r = flat.iloc[-1] / flat.iloc[0] - 1                      # sólo devenga, reinvirtiendo cada día:
+    assert 0.10 * years <= r <= np.exp(0.10 * years) - 1      # entre interés simple y continuo
+    falling = pd.Series(np.linspace(10, 8, 300), index=idx)
+    assert holding_index(falling, 364).iloc[-1] > holding_index(falling, 28).iloc[-1]  # si bajan tasas, gana el largo
+
+
+def test_long_only_has_no_shorts():
+    from stockcast.signals import add_signals
+    fc = pd.DataFrame({"ticker": ["C28", "C91", "C182", "C364", "X"], "horizon": 21,
+                       "ret_q0.5": [0.008, 0.009, 0.010, 0.012, 0.001]})
+    fc["ret_q0.1"], fc["ret_q0.9"] = fc["ret_q0.5"] - 0.002, fc["ret_q0.5"] + 0.002
+    out = add_signals(fc, Q, long_only=True)
+    assert "VENTA EN CORTO" not in set(out["signal"]) and (out["signal"] == "COMPRA").sum() == 1

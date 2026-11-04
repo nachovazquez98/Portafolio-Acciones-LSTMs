@@ -33,6 +33,9 @@ class Market:
     pit_window: int = 126
     pit_min_dollar_volume: float = 0.0   # mínimo de liquidez punto en el tiempo (moneda local)
     cost_bps: float | None = None        # costo por lado propio del mercado (None = backtest.cost_bps)
+    fred_extra: list[str] = field(default_factory=list)  # series FRED adicionales sólo para este mercado
+    long_only: bool = False              # recomendar sólo compras (p. ej. CETES: no se venden en corto)
+    requires: str | None = None          # fuente que necesita credencial (p. ej. "banxico")
 
 
 @lru_cache(maxsize=1)
